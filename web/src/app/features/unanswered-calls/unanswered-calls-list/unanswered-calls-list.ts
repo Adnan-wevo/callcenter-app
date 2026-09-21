@@ -27,6 +27,19 @@ export class UnansweredCallsListComponent {
   protected search = '';
   protected readonly searchTerm = signal('');
 
+  /**
+   * The date range sent to the server. Defaults to today, matching the
+   * backend's own default.
+   *
+   * Held as plain `YYYY-MM-DD` strings and sent as-is: the server interprets
+   * them in the app timezone (Asia/Kuala_Lumpur). Turning them into a JS
+   * `Date` here would re-serialise as UTC with a `Z` and shift the window by
+   * the local offset — the exact failure docs/extraction-plan.md §4.3 rule 1
+   * is about.
+   */
+  protected readonly dateFrom = signal(today());
+  protected readonly dateTo = signal(today());
+
   /** The row whose callback is awaiting confirmation, or null. */
   protected readonly confirming = signal<UnansweredCall | null>(null);
   protected readonly callingBack = signal(false);
@@ -59,21 +72,39 @@ export class UnansweredCallsListComponent {
     this.loading.set(true);
     this.failed.set(false);
 
-    this.service.list().subscribe({
-      next: (page) => {
-        this.rows.set(page.rows);
-        this.meta.set(page.meta);
-        this.loading.set(false);
-      },
-      error: () => {
-        this.failed.set(true);
-        this.loading.set(false);
-      },
-    });
+    this.service
+      .list({
+        // The server takes a naive local datetime; a bare date means the
+        // start of that day, so the end date is widened to cover its whole
+        // day rather than stopping at midnight.
+        date_from: `${this.dateFrom()} 00:00:00`,
+        date_to: `${this.dateTo()} 23:59:59`,
+      })
+      .subscribe({
+        next: (page) => {
+          this.rows.set(page.rows);
+          this.meta.set(page.meta);
+          this.loading.set(false);
+        },
+        error: () => {
+          this.failed.set(true);
+          this.loading.set(false);
+        },
+      });
   }
 
   protected onSearchInput(event: Event): void {
     this.searchTerm.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onDateFrom(event: Event): void {
+    this.dateFrom.set((event.target as HTMLInputElement).value);
+    this.load();
+  }
+
+  protected onDateTo(event: Event): void {
+    this.dateTo.set((event.target as HTMLInputElement).value);
+    this.load();
   }
 
   protected askCallback(row: UnansweredCall): void {
@@ -117,4 +148,17 @@ export class UnansweredCallsListComponent {
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
+}
+
+/**
+ * Today as `YYYY-MM-DD` in the BROWSER's local time.
+ *
+ * `toISOString()` would be wrong here: it converts to UTC first, so anywhere
+ * east of Greenwich the date flips a day early in the evening.
+ */
+function today(): string {
+  const now = new Date();
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  const day = `${now.getDate()}`.padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
 }

@@ -1,5 +1,12 @@
 # CallCenter UI — design spec
 
+> **§11 supersedes parts of §1–§9.** This document was first written against
+> the `wevetel-bastion` console. The target has since changed to **heal-crm**
+> — the app these screens are being extracted *from*, whose users already
+> know them. Where the two disagree, heal-crm wins. §11 lists the
+> differences; the structural guidance elsewhere (folder layout, guards, API
+> client) still stands, because that came from bastion and is unaffected.
+
 The CallCenter frontend must read as the same application as
 `wevetel-bastion`'s console: same chrome, same logo placement, same wording
 register, same way things open, same search/filter grammar.
@@ -510,3 +517,69 @@ and nothing else.
 
 Each screen ships with its route guard (`requirePermission`) and its nav
 entry gated the same way, or it is not done.
+
+---
+
+## 11. heal-crm is the visual target
+
+The screens being replaced already exist in heal-crm as Livewire/Blade views
+built on **Flux UI**, and the people who will use the Angular versions use
+those today. Matching them is not a preference — it is the difference
+between a port and a retraining exercise.
+
+Source of truth: `Modules/CallCenter/resources/views/livewire/*/index.blade.php`
+and `resources/views/layouts/app.blade.php` in heal-crm.
+
+### 11.1 What changed from the bastion-derived spec
+
+| | Bastion (§1–§9) | **heal-crm (authoritative)** |
+|---|---|---|
+| Brand | `oklch(0.55 0.18 240)` | **`#1b96c6`**, hardcoded across its Blade views, same shade in dark mode |
+| Neutrals | oklch grey scale | **Tailwind `zinc-*`** — `border-zinc-200 dark:border-zinc-700`, `bg-white dark:bg-zinc-800`, content area `bg-zinc-50 dark:bg-zinc-900` |
+| Radius | `0.625rem` (`rounded-lg`) | **`0.75rem`** (`rounded-xl`) on cards and filter panels |
+| Page header | Title + description | **Coloured icon + bold title**, description under, closed by a `border-b pb-4` rule |
+| Filters | A `Filters` toggle button opening a panel | **Always-visible filter card**, applying immediately, labelled `FILTERS` in uppercase `tracking-widest` beside a funnel icon |
+| Filter controls | Chips for closed sets | **Labelled fields in a grid** (`sm:grid-cols-2 xl:grid-cols-4`): Start Date, End Date, Queue, Queue Group |
+| Primary button | Neutral `--primary` | **The brand colour**, with `#1580ab` on hover and a small shadow |
+| Content padding | `p-4` | **`p-6`** |
+| Header bar | Sidebar trigger + breadcrumb + theme toggle | **Breadcrumb from URL segments + a live clock** (`en-MY`, 12-hour, seconds), `h-14` |
+| Footer | Docs links | **Copyright + "by Wevetel Sdn. Bhd."**, brand-coloured link |
+
+The page icon is not decoration: heal-crm colours it per screen (Unanswered
+Calls uses a red `phone-x-mark`), so the report is recognisable before the
+title is read. `app-page-header` therefore takes `icon` and `iconClass`.
+
+### 11.2 The shell is a three-column workspace
+
+heal-crm's layout is not a sidebar and a page. It is:
+
+```
+softphone panel (360px, collapsible)  |  content  |  call workspace drawer (640px)
+```
+
+Both side panels are `@persist`ed Livewire components driven by **window
+events** — `workspace:open-call`, `workspace:minimized`, `workspace:call-ended`,
+`workspace:state-sync`. The breadcrumb bar carries a live "active call" pill
+showing the number, with a minimise control.
+
+**This is not built here**, and it is the single largest gap between this app
+and the thing it replaces. Two consequences:
+
+- The Angular app currently renders sidebar + content only. An agent used to
+  having the softphone on the left will notice immediately.
+- **It answers D7.** The dial is a browser event to a persisted softphone
+  component, not an HTTP call. Whatever this app does about dialling has to
+  reach that same component — either by embedding it, or by dispatching the
+  same `workspace:open-call` event into a page that still hosts it. A REST
+  endpoint alone cannot close this gap, and the confirm dialog currently says
+  so out loud rather than pretending otherwise.
+
+### 11.3 Still to match
+
+- Queue and agent **multi-select**: heal-crm uses a custom Alpine dropdown
+  with checkboxes, brand-tinted when checked, and a `Clear selection` row.
+  This app has no queue/agent filter yet.
+- **Flux UI components** (`flux:field`, `flux:input`, `flux:select`,
+  `flux:heading`) — this app hand-writes the equivalents in `styles.css`. The
+  look is matched; the component API is not, and does not need to be.
+- The **softphone and workspace panels** (§11.2).

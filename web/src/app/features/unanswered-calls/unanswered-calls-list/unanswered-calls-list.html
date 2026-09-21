@@ -1,34 +1,63 @@
 <app-page-header
   title="Unanswered Calls"
-  description="Calls that left a queue without being answered, and why."
+  description="Analysis of abandoned, timed-out, and unanswered calls for the selected period."
+  icon="phone-missed"
+  iconClass="text-red-500"
 />
 
-<!-- Toolbar: search + (future) Filters toggle. The magnifier sits INSIDE the
-     input rather than as a button beside it — see docs/ui-design-spec.md §5.1. -->
-<div class="mt-6 flex shrink-0 items-center gap-2">
-  <div class="relative flex-1">
-    <span
-      class="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
-    >
-      <app-icon name="search" />
+<!-- Filter card. Always visible and applying immediately — heal-crm has no
+     "Filters" toggle on these report screens, because a report is READ
+     through its filters rather than filtered as an afterthought. -->
+<div class="card mt-6 px-4 py-3">
+  <div class="mb-2.5 flex items-center gap-1.5">
+    <span class="text-muted-foreground"><app-icon name="sliders" [size]="14" /></span>
+    <span class="text-muted-foreground text-xs font-semibold tracking-widest uppercase">
+      Filters
     </span>
-    <input
-      type="search"
-      class="input w-full pl-9"
-      placeholder="Search caller, queue or agent…"
-      aria-label="Search unanswered calls"
-      [value]="search"
-      (input)="onSearchInput($event)"
-    />
   </div>
-  <button type="button" class="btn btn-outline" (click)="load()">Refresh</button>
-</div>
 
-@if (searchTerm()) {
-  <p class="text-muted-foreground mt-2 text-xs">
-    Filtering the loaded page only — not a server-side search.
-  </p>
-}
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid gap-1.5">
+      <label for="date-from" class="text-xs font-medium">Start Date</label>
+      <input
+        id="date-from"
+        type="date"
+        class="input"
+        [value]="dateFrom()"
+        (change)="onDateFrom($event)"
+      />
+    </div>
+    <div class="grid gap-1.5">
+      <label for="date-to" class="text-xs font-medium">End Date</label>
+      <input id="date-to" type="date" class="input" [value]="dateTo()" (change)="onDateTo($event)" />
+    </div>
+    <div class="grid gap-1.5 sm:col-span-2">
+      <label for="search" class="text-xs font-medium">Search</label>
+      <div class="relative">
+        <span
+          class="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
+        >
+          <app-icon name="search" />
+        </span>
+        <input
+          id="search"
+          type="search"
+          class="input w-full pl-9"
+          placeholder="Caller, queue or agent…"
+          aria-label="Search unanswered calls"
+          [value]="search"
+          (input)="onSearchInput($event)"
+        />
+      </div>
+    </div>
+  </div>
+
+  @if (searchTerm()) {
+    <p class="text-muted-foreground mt-2 text-xs">
+      The search narrows the loaded page only — the date range is what goes to the server.
+    </p>
+  }
+</div>
 
 @if (loading()) {
   <div class="mt-6 flex justify-center py-12">

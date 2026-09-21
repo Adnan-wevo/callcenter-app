@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
@@ -49,7 +57,50 @@ export class App {
   /** Login renders bare — there is no session to hang a shell on yet. */
   protected readonly isBare = computed(() => this.currentUrl().startsWith('/login'));
 
+  /**
+   * Breadcrumb trail derived from the URL, as heal-crm's layout does: each
+   * path segment title-cased, so a new screen needs no breadcrumb wiring of
+   * its own.
+   */
+  protected readonly breadcrumbs = computed(() =>
+    this.currentUrl()
+      .split('?')[0]
+      .split('/')
+      .filter(Boolean)
+      .map((segment) =>
+        segment
+          .replace(/[-_]/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase()),
+      ),
+  );
+
+  protected readonly year = new Date().getFullYear();
+
+  // The live clock, en-MY as heal-crm formats it. A signal ticked by an
+  // interval rather than a pipe, so it updates without a change-detection
+  // pass over the whole tree.
+  private readonly now = signal(new Date());
+  protected readonly clockTime = computed(() =>
+    this.now().toLocaleTimeString('en-MY', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    }),
+  );
+  protected readonly clockDate = computed(() =>
+    this.now().toLocaleDateString('en-MY', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }),
+  );
+
   constructor() {
+    const tick = setInterval(() => this.now.set(new Date()), 1000);
+    inject(DestroyRef).onDestroy(() => clearInterval(tick));
+
     // Non-blocking bootstrap: whenever there is a valid session, make sure
     // authority is loaded. An effect rather than a blocking initializer, so
     // the shell can react to loading/error/ready instead of freezing the

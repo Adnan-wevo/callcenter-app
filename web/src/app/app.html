@@ -23,17 +23,56 @@
           </div>
         </app-sidebar>
 
-        <!-- Only the content area scrolls: the shell owns the viewport, so a
-             table's own header and pager stay where the user left them.
-             min-h-0 is what lets this flex child actually shrink. -->
-        <main class="h-svh min-h-0 flex-1 overflow-y-auto p-4">
-          <!-- The measure is 80% from lg up, centred, with the scrollbar left
-               on the viewport edge. Below lg it is full width: a narrow
-               measure on a phone is wrapped text between two empty margins. -->
-          <div class="mx-auto w-full lg:w-[80%]">
-            <router-outlet />
+        <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <!-- Breadcrumb bar, h-14. heal-crm carries a live clock at the
+               right of this bar; an agent working a queue is reading times
+               off call rows all day, so the current time belongs on screen
+               rather than in the OS tray behind the window. -->
+          <div
+            class="bg-card z-10 flex h-14 shrink-0 items-center justify-between border-b px-4 sm:px-6"
+          >
+            <nav class="text-muted-foreground flex items-center gap-1 text-sm" aria-label="Breadcrumb">
+              <app-icon name="grid" [size]="16" />
+              @for (crumb of breadcrumbs(); track crumb) {
+                <app-icon name="chevron-right" [size]="14" class="opacity-40" />
+                <span class="text-foreground font-medium">{{ crumb }}</span>
+              }
+            </nav>
+
+            <div class="text-muted-foreground flex items-center gap-2 text-sm">
+              <app-icon name="clock" [size]="16" />
+              <span class="hidden sm:inline">{{ clockDate() }}</span>
+              <span class="hidden opacity-40 sm:inline">|</span>
+              <span class="text-foreground font-mono font-medium">{{ clockTime() }}</span>
+            </div>
           </div>
-        </main>
+
+          <!-- Only this area scrolls, so a table's own header and the pager
+               stay where the user left them. min-h-0 is what lets a flex
+               child actually shrink instead of growing past the viewport. -->
+          <main class="bg-background flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <div class="grow shrink-0 p-6">
+              <router-outlet />
+            </div>
+
+            <footer class="text-muted-foreground shrink-0 border-t px-6 py-4 text-xs">
+              <div class="flex flex-col items-center justify-between gap-2 sm:flex-row">
+                <span>
+                  &copy; {{ year }} <span class="font-medium">Call Center</span> by
+                  <a
+                    href="https://wevetel.com"
+                    target="_blank"
+                    rel="noopener"
+                    class="text-brand font-medium hover:underline"
+                    >Wevetel Sdn. Bhd.</a
+                  >
+                  All rights reserved.
+                </span>
+                <span>Powered by <span class="font-medium">Go</span> &amp; <span class="font-medium">Angular</span></span>
+              </div>
+            </footer>
+          </main>
+        </div>
       </div>
     }
     @case ('error') {
