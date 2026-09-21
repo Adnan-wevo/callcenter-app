@@ -56,10 +56,21 @@ services:
       APP_ENV: local
       HTTP_PORT: "8080"
 
-      # Inbound auth. Disabled by default for local dev convenience — see
-      # README "Open questions". Flip to false + use cmd/hmacsign to test
-      # the real HMAC path.
-      INCOMING_AUTH_DISABLED: "true"
+      # End-user auth (browser -> this service). LOCAL DEV VALUES ONLY.
+      # The service refuses to start without JWT_SECRET, deliberately: a
+      # generated-at-startup fallback works in dev and then invalidates every
+      # session on each deploy.
+      JWT_SECRET: local-dev-jwt-secret-change-me
+      JWT_TTL_SECONDS: "28800"
+      DEV_ADMIN_PASSWORD: admin123
+      DEV_AGENT_PASSWORD: agent123
+
+      # The Angular dev server is a different origin, so it needs an explicit
+      # allow-list entry.
+      CORS_ORIGINS: "http://localhost:4200"
+
+      # Service-to-service inbound HMAC. Nothing calls in this way yet; kept
+      # for when Laravel needs to.
       INCOMING_HMAC_API_KEY: local-dev-key
       INCOMING_HMAC_SECRET: local-dev-secret
 

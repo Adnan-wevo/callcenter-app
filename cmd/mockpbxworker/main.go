@@ -66,64 +66,79 @@ func getenv(key, fallback string) string {
 	return fallback
 }
 
-// fixtures returns static stub data per action, shaped to match
-// internal/gateway/pbxworker's expected {"data": ...} / {"data": ..., "meta": ...}
-// envelope. Kept as plain gin.H (not the real structs) to keep this mock
-// independent of internal wire-format assumptions changing later.
+// fixtures returns static stub data per action, shaped to match the real
+// pbx-worker envelope confirmed against PbxReportGateway.php:
+// {"status": "ok", "data": ...} with NO "meta"/pagination on any action.
+// Kept as plain gin.H (not the real structs) to keep this mock independent
+// of internal wire-format assumptions changing later.
 var fixtures = map[string]gin.H{
 	"queue-names": {
-		"data": []gin.H{
-			{"id": "1", "extension": "6001", "name": "Sales"},
-			{"id": "2", "extension": "6002", "name": "Support"},
-		},
+		"status": "ok",
+		"data":   []string{"Sales", "Support"},
 	},
 	"agent-names": {
-		"data": []gin.H{
-			{"id": "101", "name": "Ahmad"},
-			{"id": "102", "name": "Siti"},
-		},
+		"status": "ok",
+		"data":   []string{"Ahmad", "Siti"},
 	},
 	"answered-calls": {
+		"status": "ok",
 		"data": []gin.H{
 			{
-				"id": "call-1001", "queue_id": "1", "queue_name": "Sales",
-				"agent_id": "101", "agent_name": "Ahmad", "caller_id": "+60123456789",
-				"entered_at": "2026-09-20T09:00:00Z", "answered_at": "2026-09-20T09:00:12Z", "ended_at": "2026-09-20T09:04:30Z",
-				"wait_seconds": 12, "talk_seconds": 258,
+				"datetime": "2026-09-20 09:00:12", "queue_name": "Sales", "agent_name": "Ahmad",
+				"event": "COMPLETEAGENT", "uniqueid": "1758358812.101", "caller_id": "+60123456789",
+				"url": "", "did": "", "ring_time": 12, "recording_file": "1758358812.101.wav",
+				"hold_time": 12, "duration": 258, "position": 1, "transfer_exten": "",
+				"year_month": "2026-09", "year_week": "2026-38", "date": "2026-09-20",
+				"hour": 9, "day_of_week": 7, "seconds_of_day": 32412,
 			},
 		},
-		"meta": gin.H{"current_page": 1, "per_page": 25, "total": 1, "last_page": 1},
 	},
 	"unanswered-calls": {
+		"status": "ok",
 		"data": []gin.H{
 			{
-				"id": "call-1002", "queue_id": "2", "queue_name": "Support",
-				"caller_id": "+60129876543",
-				"entered_at": "2026-09-20T10:00:00Z", "abandoned_at": "2026-09-20T10:01:30Z",
-				"wait_seconds": 90, "reason": "ABANDONED",
+				"datetime": "2026-09-20 10:01:30", "queue_name": "Support", "agent_name": "",
+				"event": "ABANDON", "uniqueid": "1758362490.102", "caller_id": "+60129876543",
+				"url": "", "did": "", "ring_time": 90, "hold_time": 90,
+				"year_month": "2026-09", "year_week": "2026-38", "date": "2026-09-20",
+				"hour": 10, "day_of_week": 7,
 			},
 		},
-		"meta": gin.H{"current_page": 1, "per_page": 25, "total": 1, "last_page": 1},
 	},
 	"agent-events": {
+		"status": "ok",
 		"data": []gin.H{
-			{"id": "evt-1", "agent_id": "101", "agent_name": "Ahmad", "queue_id": "1", "event_type": "LOGIN", "event_time": "2026-09-20T08:55:00Z"},
+			{
+				"datetime": "2026-09-20 08:55:00", "queue_name": "Sales", "agent_name": "Ahmad",
+				"event": "AGENTLOGIN", "info1": "", "info2": "", "info3": "",
+				"timestamp": "1758358500", "uniqueid": "",
+			},
 		},
-		"meta": gin.H{"current_page": 1, "per_page": 25, "total": 1, "last_page": 1},
 	},
 	"call-search": {
+		"status": "ok",
 		"data": []gin.H{
-			{"id": "call-1001", "queue_id": "1", "agent_id": "101", "caller_id": "+60123456789", "status": "ANSWERED", "started_at": "2026-09-20T09:00:00Z", "ended_at": "2026-09-20T09:04:30Z"},
+			{
+				"uniqueid": "1758358812.101", "caller_id": "+60123456789",
+				"date_start": "2026-09-20 09:00:00", "date_end": "2026-09-20 09:04:30",
+				"event": "COMPLETEAGENT", "agent_name": "Ahmad", "queue_name": "Sales",
+				"talk_time": 258, "total_duration": 270, "wait_time": 12,
+				"queue_hops": 1, "recording_file": "1758358812.101.wav",
+			},
 		},
-		"meta": gin.H{"current_page": 1, "per_page": 25, "total": 1, "last_page": 1},
 	},
 	"call-detail": {
-		"data": gin.H{
-			"id": "call-1001", "queue_id": "1", "agent_id": "101", "caller_id": "+60123456789",
-			"status": "ANSWERED", "started_at": "2026-09-20T09:00:00Z", "ended_at": "2026-09-20T09:04:30Z",
-			"wait_seconds": 12, "talk_seconds": 258, "recording_url": "http://mock-pbx-worker:8081/recordings/call-1001.wav",
-			"events": []gin.H{
-				{"id": "evt-1", "agent_id": "101", "agent_name": "Ahmad", "queue_id": "1", "event_type": "ANSWERED", "event_time": "2026-09-20T09:00:12Z"},
+		"status": "ok",
+		"data": []gin.H{
+			{
+				"datetime": "2026-09-20 09:00:00", "queue_name": "Sales", "agent_name": "",
+				"event": "ENTERQUEUE", "info1": "", "info2": "", "info3": "",
+				"uniqueid": "1758358812.101", "recording_file": "",
+			},
+			{
+				"datetime": "2026-09-20 09:00:12", "queue_name": "Sales", "agent_name": "Ahmad",
+				"event": "COMPLETEAGENT", "info1": "", "info2": "", "info3": "",
+				"uniqueid": "1758358812.101", "recording_file": "1758358812.101.wav",
 			},
 		},
 	},

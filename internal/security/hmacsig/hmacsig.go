@@ -1,34 +1,27 @@
 // Package hmacsig implements the HMAC-SHA256 request signing scheme shared by
-// the existing Laravel <-> pbx-worker (v2) integration:
+// the existing Laravel <-> pbx-worker (v2) integration.
+//
+// CONFIRMED against Modules/SoftPhone/app/Support/HmacSigner.php and
+// Modules/SoftPhone/app/Http/Middleware/VerifyPbxWebhookHmac.php:
 //
 //	Headers:   X-Api-Key, X-Timestamp, X-Nonce, X-Body-Hash, X-Signature
 //	Canonical: METHOD\nURI\nTIMESTAMP\nNONCE\nBODY_HASH
-//	Signature: hex(HMAC_SHA256(secret, canonical))
+//	BodyHash:  lowercase hex SHA-256 of the raw request body
+//	Signature: base64(HMAC_SHA256(secret, canonical))  -- NOT hex
+//	Timestamp: Unix epoch seconds, decimal string (PHP's (string) time())
+//	Nonce:     16 random bytes, lowercase hex (32 chars)
+//	Tolerance: 300s clock skew, 600s nonce-replay TTL on the PHP side
+//	Key:       secret used as raw bytes directly, no KDF/decoding
 //
 // It is used both for outbound calls this service makes (to pbx-worker and
 // back to Laravel) and for verifying inbound calls made to this service.
-//
-// ASSUMPTION — none of the exact wire details below have been confirmed
-// against the real Laravel/pbx-worker source yet. Re-check every item in
-// this list once the reference code lands:
-//   - Timestamp format: assumed Unix epoch seconds as a decimal string
-//     (PHP's time()). Could instead be milliseconds or RFC3339.
-//   - URI in the canonical string: assumed to be path + query string,
-//     without scheme/host (e.g. "/api/reports.php?action=queue-names").
-//     Could instead be path-only, or include the host.
-//   - Body hash: assumed to be lowercase hex SHA-256 of the raw request
-//     body, with an empty body hashing to sha256("") rather than being
-//     an empty string.
-//   - Nonce: assumed to be an opaque random string (we generate 16 random
-//     bytes, hex-encoded). Replay protection here is in-memory only — see
-//     internal/middleware for the caveat when running more than one
-//     instance of this service.
 package hmacsig
 
 import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -80,10 +73,14 @@ func CanonicalString(method, uri, timestamp, nonce, bodyHash string) string {
 	return fmt.Sprintf("%s\n%s\n%s\n%s\n%s", method, uri, timestamp, nonce, bodyHash)
 }
 
+// sign returns base64(HMAC-SHA256(secret, canonical)) — matching PHP's
+// base64_encode(hash_hmac('sha256', $canonical, $secret, true)). This must
+// stay base64, not hex: BodyHash above is hex (matches PHP's hash()
+// without raw output), but the final signature is base64 on both sides.
 func sign(secret, canonical string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(canonical))
-	return hex.EncodeToString(mac.Sum(nil))
+	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
 // Sign produces a fresh set of signing headers for an outbound request.

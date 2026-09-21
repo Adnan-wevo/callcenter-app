@@ -2,3 +2,8 @@
 *.env
 !.env.example
 .DS_Store
+
+# Angular frontend
+web/node_modules/
+web/dist/
+web/.angular/

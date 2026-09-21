@@ -8,18 +8,16 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 
 	"callcenter-service/internal/security/hmacsig"
 )
 
-// HMACClient talks to pbx-worker v2 (PHP), base path /api/reports.php,
-// action=<name> query param, HMAC-SHA256 signed per hmacsig.
-//
-// ASSUMPTION: all actions are GET requests with filters as query params,
-// and all return {"data": ..., "meta": {...}} for lists — matching the
-// Laravel API Resource convention this service itself follows. Confirm
-// against the real pbx-worker responses once reference code lands.
+// HMACClient talks to pbx-worker v2 (PHP). CONFIRMED against
+// Modules/CallCenter/app/Services/Pbx/PbxReportGateway.php: single endpoint
+// GET /api/reports.php?action=<name>, always HMAC-signed (no per-action
+// auth switching, no JWT anywhere in this gateway), response envelope is
+// {"status": "ok"|..., "data": ..., "message"?: ...} with NO
+// pagination/meta on any action.
 type HMACClient struct {
 	http    *http.Client
 	baseURL string
@@ -32,113 +30,117 @@ func NewHMACClient(httpClient *http.Client, baseURL string, creds hmacsig.Creden
 
 var _ ReportsClient = (*HMACClient)(nil)
 
-func (c *HMACClient) QueueNames(ctx context.Context) ([]QueueName, error) {
-	var out struct {
-		Data []QueueName `json:"data"`
-	}
-	if err := c.get(ctx, "queue-names", nil, &out); err != nil {
+// QueueNames returns the real pbx-worker shape: a flat list of queue name
+// strings (not objects with id/extension/name).
+func (c *HMACClient) QueueNames(ctx context.Context) ([]string, error) {
+	var names []string
+	if err := c.get(ctx, "queue-names", nil, &names); err != nil {
 		return nil, err
 	}
-	return out.Data, nil
+	return names, nil
 }
 
-func (c *HMACClient) AgentNames(ctx context.Context) ([]AgentName, error) {
-	var out struct {
-		Data []AgentName `json:"data"`
-	}
-	if err := c.get(ctx, "agent-names", nil, &out); err != nil {
+// AgentNames returns the real pbx-worker shape: a flat list of agent name
+// strings (not objects with id/name).
+func (c *HMACClient) AgentNames(ctx context.Context) ([]string, error) {
+	var names []string
+	if err := c.get(ctx, "agent-names", nil, &names); err != nil {
 		return nil, err
 	}
-	return out.Data, nil
+	return names, nil
 }
 
-func (c *HMACClient) AnsweredCalls(ctx context.Context, p ListParams) ([]AnsweredCall, Pagination, error) {
-	var out struct {
-		Data []AnsweredCall `json:"data"`
-		Meta Pagination     `json:"meta"`
+func (c *HMACClient) AnsweredCalls(ctx context.Context, p ListParams) ([]AnsweredCall, error) {
+	var rows []AnsweredCall
+	if err := c.get(ctx, "answered-calls", listParamsToQuery(p), &rows); err != nil {
+		return nil, err
 	}
-	if err := c.get(ctx, "answered-calls", listParamsToQuery(p), &out); err != nil {
-		return nil, Pagination{}, err
-	}
-	return out.Data, out.Meta, nil
+	return rows, nil
 }
 
-func (c *HMACClient) UnansweredCalls(ctx context.Context, p ListParams) ([]UnansweredCall, Pagination, error) {
-	var out struct {
-		Data []UnansweredCall `json:"data"`
-		Meta Pagination       `json:"meta"`
+func (c *HMACClient) UnansweredCalls(ctx context.Context, p ListParams) ([]UnansweredCall, error) {
+	var rows []UnansweredCall
+	if err := c.get(ctx, "unanswered-calls", listParamsToQuery(p), &rows); err != nil {
+		return nil, err
 	}
-	if err := c.get(ctx, "unanswered-calls", listParamsToQuery(p), &out); err != nil {
-		return nil, Pagination{}, err
-	}
-	return out.Data, out.Meta, nil
+	return rows, nil
 }
 
-func (c *HMACClient) AgentEvents(ctx context.Context, p ListParams) ([]AgentEvent, Pagination, error) {
-	var out struct {
-		Data []AgentEvent `json:"data"`
-		Meta Pagination   `json:"meta"`
+func (c *HMACClient) AgentEvents(ctx context.Context, p ListParams) ([]AgentEvent, error) {
+	var rows []AgentEvent
+	if err := c.get(ctx, "agent-events", listParamsToQuery(p), &rows); err != nil {
+		return nil, err
 	}
-	if err := c.get(ctx, "agent-events", listParamsToQuery(p), &out); err != nil {
-		return nil, Pagination{}, err
-	}
-	return out.Data, out.Meta, nil
+	return rows, nil
 }
 
-func (c *HMACClient) CallSearch(ctx context.Context, p CallSearchParams) ([]CallSummary, Pagination, error) {
+func (c *HMACClient) CallSearch(ctx context.Context, p CallSearchParams) ([]CallSearchResult, error) {
 	q := listParamsToQuery(p.ListParams)
 	if p.CallerID != "" {
 		q.Set("caller_id", p.CallerID)
 	}
-	if p.Status != "" {
-		q.Set("status", p.Status)
+	if p.UniqueID != "" {
+		q.Set("unique_id", p.UniqueID)
 	}
-	var out struct {
-		Data []CallSummary `json:"data"`
-		Meta Pagination    `json:"meta"`
+	// PbxReportGateway only sends duration_operator/duration_seconds together.
+	if p.DurationOperator != "" && p.DurationSeconds != nil {
+		q.Set("duration_operator", p.DurationOperator)
+		q.Set("duration_seconds", strconv.Itoa(*p.DurationSeconds))
 	}
-	if err := c.get(ctx, "call-search", q, &out); err != nil {
-		return nil, Pagination{}, err
-	}
-	return out.Data, out.Meta, nil
-}
-
-func (c *HMACClient) CallDetail(ctx context.Context, callID string) (*CallDetail, error) {
-	q := url.Values{}
-	q.Set("call_id", callID) // ASSUMPTION: param name for the call-detail action
-	var out struct {
-		Data CallDetail `json:"data"`
-	}
-	if err := c.get(ctx, "call-detail", q, &out); err != nil {
+	var rows []CallSearchResult
+	if err := c.get(ctx, "call-search", q, &rows); err != nil {
 		return nil, err
 	}
-	return &out.Data, nil
+	return rows, nil
 }
 
+// CallDetail fetches the full event timeline for one call. uniqueID is
+// sent as call_uniqueid (NOT call_id), matching
+// PbxReportGateway::fetchCallDetail(). The response is a flat array of
+// timeline rows, not a single summary object.
+func (c *HMACClient) CallDetail(ctx context.Context, uniqueID string) ([]CallDetailRow, error) {
+	q := url.Values{}
+	q.Set("call_uniqueid", uniqueID)
+	var rows []CallDetailRow
+	if err := c.get(ctx, "call-detail", q, &rows); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// listParamsToQuery builds the query params PbxReportGateway::buildParams()
+// always sends: date_from/date_to as naive "Y-m-d H:i:s" local strings
+// (NOT RFC3339 — neither the real gateway nor pbx-worker carry an explicit
+// UTC offset here; both sides rely on the app's configured timezone, see
+// README), seconds_start/seconds_end, and queues/agents only when
+// non-empty. PHP's http_build_query on a numerically-indexed array emits
+// queues[0]=x&queues[1]=y (not queues[]=x&queues[]=y); we match that shape.
 func listParamsToQuery(p ListParams) url.Values {
 	q := url.Values{}
-	if p.QueueID != "" {
-		q.Set("queue_id", p.QueueID)
+	q.Set("date_from", p.DateFrom.Format("2006-01-02 15:04:05"))
+	q.Set("date_to", p.DateTo.Format("2006-01-02 15:04:05"))
+	q.Set("seconds_start", strconv.Itoa(p.SecondsStart))
+	q.Set("seconds_end", strconv.Itoa(p.SecondsEnd))
+	for i, name := range p.Queues {
+		q.Set(fmt.Sprintf("queues[%d]", i), name)
 	}
-	if p.AgentID != "" {
-		q.Set("agent_id", p.AgentID)
-	}
-	if p.From != nil {
-		q.Set("from", p.From.Format(time.RFC3339))
-	}
-	if p.To != nil {
-		q.Set("to", p.To.Format(time.RFC3339))
-	}
-	if p.Page > 0 {
-		q.Set("page", strconv.Itoa(p.Page))
-	}
-	if p.PerPage > 0 {
-		q.Set("per_page", strconv.Itoa(p.PerPage))
+	for i, name := range p.Agents {
+		q.Set(fmt.Sprintf("agents[%d]", i), name)
 	}
 	return q
 }
 
-// get performs a signed GET request against /api/reports.php?action=<action>&...
+// apiEnvelope is the real pbx-worker response shape: every action returns
+// {"status": "ok"|..., "data": ..., "message"?: ...}. None carry a "meta"
+// block — this API has no pagination at all.
+type apiEnvelope struct {
+	Status  string          `json:"status"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data"`
+}
+
+// get performs a signed GET request against /api/reports.php?action=<action>
+// and decodes the envelope's "data" field into out.
 func (c *HMACClient) get(ctx context.Context, action string, extra url.Values, out any) error {
 	q := url.Values{}
 	for k, v := range extra {
@@ -168,12 +170,29 @@ func (c *HMACClient) get(ctx context.Context, action string, extra url.Values, o
 		return fmt.Errorf("pbxworker: read response for action %s: %w", action, err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	// PbxReportGateway.php treats any 2xx as successful (not just exactly
+	// 200), and distinguishes 401/403/409/429 (auth/rate-limit) from 503
+	// (worker down) from other non-2xx failures. We collapse that
+	// distinction into one error here but at least match the "2xx is
+	// success" check.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("pbxworker: action %s returned status %d: %s", action, resp.StatusCode, string(body))
 	}
 
-	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("pbxworker: decode response for action %s: %w", action, err)
+	var env apiEnvelope
+	if err := json.Unmarshal(body, &env); err != nil {
+		return fmt.Errorf("pbxworker: decode response envelope for action %s: %w", action, err)
+	}
+	if env.Status != "ok" {
+		msg := env.Message
+		if msg == "" {
+			msg = "unknown error"
+		}
+		return fmt.Errorf("pbxworker: action %s returned status %q: %s", action, env.Status, msg)
+	}
+
+	if err := json.Unmarshal(env.Data, out); err != nil {
+		return fmt.Errorf("pbxworker: decode data for action %s: %w", action, err)
 	}
 	return nil
 }

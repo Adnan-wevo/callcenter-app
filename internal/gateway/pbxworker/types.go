@@ -1,100 +1,127 @@
 // Package pbxworker is the HTTP gateway to the pbx-worker service that
 // serves historical call-center reports.
 //
-// ASSUMPTION — every struct/field below is a guess at a reasonable shape
-// for queue reporting data. None of it is confirmed against the real
-// pbx-worker v2 (PHP, /api/reports.php) response bodies. Confirm and adjust
-// once the reference code lands.
+// Shapes below are CONFIRMED against
+// Modules/CallCenter/app/Services/Pbx/PbxReportGateway.php (endpoint,
+// params) and its per-method doc comments (row field names). A few row
+// fields hinted at elsewhere in the Laravel codebase but not present in
+// the gateway's own doc comments (e.g. UnansweredCall's possible
+// "last_agent", referenced by UnansweredCallsExport.php) are NOT included
+// here — verify against a live response before adding them.
 package pbxworker
 
 import "time"
 
-type QueueName struct {
-	ID        string `json:"id"`
-	Extension string `json:"extension"`
-	Name      string `json:"name"`
-}
-
-type AgentName struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
+// AnsweredCall is one row from action=answered-calls.
 type AnsweredCall struct {
-	ID              string    `json:"id"`
-	QueueID         string    `json:"queue_id"`
-	QueueName       string    `json:"queue_name"`
-	AgentID         string    `json:"agent_id"`
-	AgentName       string    `json:"agent_name"`
-	CallerID        string    `json:"caller_id"`
-	EnteredAt       time.Time `json:"entered_at"`
-	AnsweredAt      time.Time `json:"answered_at"`
-	EndedAt         time.Time `json:"ended_at"`
-	WaitSeconds     int       `json:"wait_seconds"`
-	TalkSeconds     int       `json:"talk_seconds"`
-	RecordingURL    string    `json:"recording_url,omitempty"` // TODO: confirm whether pbx-worker returns this directly or if it must be looked up from qstats.recordings
+	Datetime      string `json:"datetime"`
+	QueueName     string `json:"queue_name"`
+	AgentName     string `json:"agent_name"`
+	Event         string `json:"event"`
+	UniqueID      string `json:"uniqueid"`
+	CallerID      string `json:"caller_id"`
+	URL           string `json:"url"`
+	DID           string `json:"did"`
+	RingTime      int    `json:"ring_time"`
+	RecordingFile string `json:"recording_file"`
+	HoldTime      int    `json:"hold_time"`
+	Duration      int    `json:"duration"`
+	Position      int    `json:"position"`
+	TransferExten string `json:"transfer_exten"`
+	YearMonth     string `json:"year_month"`
+	YearWeek      string `json:"year_week"`
+	Date          string `json:"date"`
+	Hour          int    `json:"hour"`
+	DayOfWeek     int    `json:"day_of_week"`
+	SecondsOfDay  int    `json:"seconds_of_day"`
 }
 
+// UnansweredCall is one row from action=unanswered-calls. Event is one of
+// the four real CallEvent enum cases for unanswered calls: ABANDON,
+// EXITWITHTIMEOUT, EXITWITHKEY, EXITEMPTY.
 type UnansweredCall struct {
-	ID          string    `json:"id"`
-	QueueID     string    `json:"queue_id"`
-	QueueName   string    `json:"queue_name"`
-	CallerID    string    `json:"caller_id"`
-	EnteredAt   time.Time `json:"entered_at"`
-	AbandonedAt time.Time `json:"abandoned_at"`
-	WaitSeconds int       `json:"wait_seconds"`
-	Reason      string    `json:"reason"` // ASSUMPTION enum: ABANDONED, TIMEOUT, ...
+	Datetime  string `json:"datetime"`
+	QueueName string `json:"queue_name"`
+	AgentName string `json:"agent_name"`
+	Event     string `json:"event"`
+	UniqueID  string `json:"uniqueid"`
+	CallerID  string `json:"caller_id"`
+	URL       string `json:"url"`
+	DID       string `json:"did"`
+	RingTime  int    `json:"ring_time"`
+	HoldTime  int    `json:"hold_time"`
+	YearMonth string `json:"year_month"`
+	YearWeek  string `json:"year_week"`
+	Date      string `json:"date"`
+	Hour      int    `json:"hour"`
+	DayOfWeek int    `json:"day_of_week"`
 }
 
+// AgentEvent is one row from action=agent-events.
 type AgentEvent struct {
-	ID        string    `json:"id"`
-	AgentID   string    `json:"agent_id"`
-	AgentName string    `json:"agent_name"`
-	QueueID   string    `json:"queue_id"`
-	EventType string    `json:"event_type"`
-	EventTime time.Time `json:"event_time"`
+	Datetime  string `json:"datetime"`
+	QueueName string `json:"queue_name"`
+	AgentName string `json:"agent_name"`
+	Event     string `json:"event"`
+	Info1     string `json:"info1"`
+	Info2     string `json:"info2"`
+	Info3     string `json:"info3"`
+	Timestamp string `json:"timestamp"`
+	UniqueID  string `json:"uniqueid"`
 }
 
-type CallSummary struct {
-	ID         string    `json:"id"`
-	QueueID    string    `json:"queue_id"`
-	AgentID    string    `json:"agent_id,omitempty"`
-	CallerID   string    `json:"caller_id"`
-	Status     string    `json:"status"` // ASSUMPTION enum: ANSWERED, ABANDONED, TIMEOUT
-	StartedAt  time.Time `json:"started_at"`
-	EndedAt    time.Time `json:"ended_at"`
+// CallSearchResult is one row from action=call-search.
+type CallSearchResult struct {
+	UniqueID      string `json:"uniqueid"`
+	CallerID      string `json:"caller_id"`
+	DateStart     string `json:"date_start"`
+	DateEnd       string `json:"date_end"`
+	Event         string `json:"event"`
+	AgentName     string `json:"agent_name"`
+	QueueName     string `json:"queue_name"`
+	TalkTime      int    `json:"talk_time"`
+	TotalDuration int    `json:"total_duration"`
+	WaitTime      int    `json:"wait_time"`
+	QueueHops     int    `json:"queue_hops"`
+	RecordingFile string `json:"recording_file"`
 }
 
-type CallDetail struct {
-	CallSummary
-	WaitSeconds  int          `json:"wait_seconds"`
-	TalkSeconds  int          `json:"talk_seconds"`
-	RecordingURL string       `json:"recording_url,omitempty"`
-	Events       []AgentEvent `json:"events,omitempty"`
+// CallDetailRow is one timeline event for a single call. action=call-detail
+// returns an ARRAY of these (one call can have many rows across its
+// lifecycle) — not a single summary object.
+type CallDetailRow struct {
+	Datetime      string `json:"datetime"`
+	QueueName     string `json:"queue_name"`
+	AgentName     string `json:"agent_name"`
+	Event         string `json:"event"`
+	Info1         string `json:"info1"`
+	Info2         string `json:"info2"`
+	Info3         string `json:"info3"`
+	UniqueID      string `json:"uniqueid"`
+	RecordingFile string `json:"recording_file"`
 }
 
-// Pagination mirrors what we assume pbx-worker returns for list endpoints.
-type Pagination struct {
-	CurrentPage int `json:"current_page"`
-	PerPage     int `json:"per_page"`
-	Total       int `json:"total"`
-	LastPage    int `json:"last_page"`
-}
-
-// ListParams covers the filter/pagination query params assumed common to
-// the answered-calls, unanswered-calls and agent-events actions.
+// ListParams covers the filters PbxReportGateway::buildParams() always
+// sends for answered-calls/unanswered-calls/agent-events: a date range, a
+// seconds-of-day sub-range within each day, and optional queue/agent name
+// filters. See hmac_client.go for exact wire format (naive local
+// "Y-m-d H:i:s" strings, NOT RFC3339).
 type ListParams struct {
-	QueueID string
-	AgentID string
-	From    *time.Time
-	To      *time.Time
-	Page    int
-	PerPage int
+	DateFrom     time.Time
+	DateTo       time.Time
+	SecondsStart int // default 0
+	SecondsEnd   int // default 86399
+	Queues       []string
+	Agents       []string
 }
 
-// CallSearchParams covers the call-search action's assumed filters.
+// CallSearchParams covers call-search's extra filters on top of ListParams.
+// DurationOperator/DurationSeconds are only ever sent together —
+// PbxReportGateway.php only includes them as a pair.
 type CallSearchParams struct {
 	ListParams
-	CallerID string
-	Status   string
+	CallerID         string
+	UniqueID         string
+	DurationOperator string
+	DurationSeconds  *int
 }

@@ -9,12 +9,14 @@ import (
 
 // Repository is a thin read-only data access layer over the qstats database.
 //
-// Only ListQueueNames and ListQueueAgents are currently wired to an HTTP
-// handler (see internal/handlers) — see the "Open questions" section in
-// README.md for why. The remaining methods are implemented per spec item 3
-// ("qstats DB connection layer ... untuk 5 table") and are ready to wire up
-// once we know which reports (if any) should read from qstats directly vs.
-// via the pbx-worker HTTP gateway.
+// See models.go for schema provenance notes. None of these methods are
+// confirmed to be the right integration point for reporting — the real
+// Laravel app sources report data via internal/gateway/pbxworker instead,
+// and only reads qstats directly for health-check row counts.
+// ListQueueNames/ListQueueAgents are wired to handlers today as a
+// placeholder inherited from before this schema was confirmed; revisit
+// whether they should instead go through the pbx-worker gateway (see
+// README "Open questions").
 type Repository struct {
 	db *sqlx.DB
 }
@@ -25,81 +27,78 @@ func NewRepository(db *sqlx.DB) *Repository {
 
 func (r *Repository) ListQueueNames(ctx context.Context) ([]QueueName, error) {
 	var rows []QueueName
-	// ASSUMPTION: table/column names — see models.go header.
-	err := r.db.SelectContext(ctx, &rows, `SELECT id, extension, name, created_at FROM queue_names ORDER BY name`)
+	err := r.db.SelectContext(ctx, &rows, `SELECT queue_id, queue FROM qname ORDER BY queue`)
 	if err != nil {
-		return nil, fmt.Errorf("qstats: list queue_names: %w", err)
+		return nil, fmt.Errorf("qstats: list qname: %w", err)
 	}
 	return rows, nil
 }
 
-func (r *Repository) ListQueueAgents(ctx context.Context, queueID *int64) ([]QueueAgent, error) {
+// ListQueueAgents lists every row in qagent. The real schema has no
+// queue-linkage column on this table — agents are not tied to a single
+// queue at the qagent-row level — so there is no per-queue filter here
+// (an earlier version of this method assumed a queue_id column that
+// doesn't exist).
+func (r *Repository) ListQueueAgents(ctx context.Context) ([]QueueAgent, error) {
 	var rows []QueueAgent
-	var err error
-	if queueID != nil {
-		err = r.db.SelectContext(ctx, &rows, `SELECT id, agent_id, name, queue_id, created_at FROM queue_agents WHERE queue_id = ? ORDER BY name`, *queueID)
-	} else {
-		err = r.db.SelectContext(ctx, &rows, `SELECT id, agent_id, name, queue_id, created_at FROM queue_agents ORDER BY name`)
-	}
+	err := r.db.SelectContext(ctx, &rows, `SELECT agent_id, agent FROM qagent ORDER BY agent`)
 	if err != nil {
-		return nil, fmt.Errorf("qstats: list queue_agents: %w", err)
+		return nil, fmt.Errorf("qstats: list qagent: %w", err)
 	}
 	return rows, nil
 }
 
-// ListQueueStats is not currently wired to any handler — see doc comment above.
-func (r *Repository) ListQueueStats(ctx context.Context, queueID int64, limit, offset int) ([]QueueStat, error) {
+// ListEventTypes lists every row in qevent — a small lookup table, not a
+// per-occurrence log. Not currently wired to any handler.
+func (r *Repository) ListEventTypes(ctx context.Context) ([]QueueEvent, error) {
+	var rows []QueueEvent
+	err := r.db.SelectContext(ctx, &rows, `SELECT event_id, event FROM qevent ORDER BY event_id`)
+	if err != nil {
+		return nil, fmt.Errorf("qstats: list qevent: %w", err)
+	}
+	return rows, nil
+}
+
+// ListQueueStats is not currently wired to any handler. qname is the FK
+// column name on queue_stats (see QueueStat doc comment), not a display
+// name.
+func (r *Repository) ListQueueStats(ctx context.Context, qname int64, limit, offset int) ([]QueueStat, error) {
 	var rows []QueueStat
 	err := r.db.SelectContext(ctx, &rows,
-		`SELECT id, queue_id, agent_id, call_id, event_type, wait_seconds, talk_seconds, started_at, ended_at
-		 FROM queue_stats WHERE queue_id = ? ORDER BY started_at DESC LIMIT ? OFFSET ?`,
-		queueID, limit, offset)
+		`SELECT queue_stats_id, datetime, qname, qagent, qevent, uniqueid
+		 FROM queue_stats WHERE qname = ? ORDER BY datetime DESC LIMIT ? OFFSET ?`,
+		qname, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("qstats: list queue_stats: %w", err)
 	}
 	return rows, nil
 }
 
-// ListQueueStatsSummary reads the queue_stats_mv materialized view — not
-// currently wired to any handler; the spec's endpoint list doesn't include
-// an explicit "daily summary" report, but the table exists so it's exposed
-// here for when that's clarified.
-func (r *Repository) ListQueueStatsSummary(ctx context.Context, queueID int64) ([]QueueStatMV, error) {
+// ListQueueStatsMV is not currently wired to any handler. Only the three
+// confirmed datetime columns are selected — see QueueStatMV doc comment
+// for why the rest of this table's schema is not modeled yet.
+func (r *Repository) ListQueueStatsMV(ctx context.Context, limit int) ([]QueueStatMV, error) {
 	var rows []QueueStatMV
 	err := r.db.SelectContext(ctx, &rows,
-		`SELECT queue_id, stat_date, total_calls, answered_calls, abandoned_calls, avg_wait_seconds, avg_talk_seconds
-		 FROM queue_stats_mv WHERE queue_id = ? ORDER BY stat_date DESC`,
-		queueID)
+		`SELECT datetime, datetimeconnect, datetimeend FROM queue_stats_mv ORDER BY datetime DESC LIMIT ?`,
+		limit)
 	if err != nil {
 		return nil, fmt.Errorf("qstats: list queue_stats_mv: %w", err)
 	}
 	return rows, nil
 }
 
-// ListQueueEvents is not currently wired to any handler.
-func (r *Repository) ListQueueEvents(ctx context.Context, queueID int64, limit, offset int) ([]QueueEvent, error) {
-	var rows []QueueEvent
-	err := r.db.SelectContext(ctx, &rows,
-		`SELECT id, queue_id, agent_id, event_type, event_time, metadata
-		 FROM queue_events WHERE queue_id = ? ORDER BY event_time DESC LIMIT ? OFFSET ?`,
-		queueID, limit, offset)
-	if err != nil {
-		return nil, fmt.Errorf("qstats: list queue_events: %w", err)
-	}
-	return rows, nil
-}
-
-// GetRecordingByCallID is not currently wired to any handler. It may be
+// GetRecordingByUniqueID is not currently wired to any handler. It may be
 // needed to enrich the pbx-worker call-detail response with a recording
-// URL/path — see internal/handlers/calls.go TODO.
-func (r *Repository) GetRecordingByCallID(ctx context.Context, callID string) (*Recording, error) {
+// filename if pbx-worker doesn't already include one — see
+// internal/handlers/calls.go.
+func (r *Repository) GetRecordingByUniqueID(ctx context.Context, uniqueID string) (*Recording, error) {
 	var rec Recording
 	err := r.db.GetContext(ctx, &rec,
-		`SELECT id, call_id, queue_id, agent_id, file_path, duration_seconds, recorded_at
-		 FROM recordings WHERE call_id = ? LIMIT 1`,
-		callID)
+		`SELECT uniqueid, filename FROM recordings WHERE uniqueid = ? LIMIT 1`,
+		uniqueID)
 	if err != nil {
-		return nil, fmt.Errorf("qstats: get recording for call %s: %w", callID, err)
+		return nil, fmt.Errorf("qstats: get recording for uniqueid %s: %w", uniqueID, err)
 	}
 	return &rec, nil
 }

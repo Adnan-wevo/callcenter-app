@@ -1,80 +1,89 @@
 -- Local-testing-only schema for the "qstats" database.
 --
--- ASSUMPTION: every table/column here is a guess — see
--- internal/db/qstats/models.go for the full list of assumptions. This file
--- exists purely so docker-compose can boot a MySQL instance with something
--- to query against; REPLACE it with the real schema (or a dump/migration
--- derived from it) once the Laravel/pbx-worker reference lands.
+-- Table names, primary keys and the columns below are taken from the REAL
+-- Laravel Eloquent models (Modules/CallCenter/app/Models/*.php) — see
+-- internal/db/qstats/models.go.
+--
+-- Two caveats:
+--
+--  1. The real qstats database has NO migrations anywhere in the Laravel app.
+--     It is owned by the PBX server (config/tenancy.php says so). This file
+--     is NOT that schema — it is the subset this service reads, shaped so
+--     docker-compose has something to query against locally.
+--  2. queue_stats and queue_stats_mv declare no $fillable in Laravel, so
+--     their full column lists are unknown. Only the columns confirmed via the
+--     models' relations and casts are here. Get the rest from a live
+--     `SHOW CREATE TABLE` before relying on them.
 
-CREATE TABLE IF NOT EXISTS queue_names (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    extension VARCHAR(32) NOT NULL,
-    name VARCHAR(128) NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+-- Queue name lookup. Real table is `qname`, PK `queue_id`, label column
+-- `queue` — NOT `queue_names`/`id`/`name`.
+CREATE TABLE IF NOT EXISTS qname (
+    queue_id INT AUTO_INCREMENT PRIMARY KEY,
+    queue VARCHAR(128) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS queue_agents (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    agent_id VARCHAR(32) NOT NULL,
-    name VARCHAR(128) NOT NULL,
-    queue_id INT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    KEY idx_queue_agents_queue_id (queue_id)
+-- Agent name lookup. Real table is `qagent`, PK `agent_id`, label column
+-- `agent`. Note there is NO queue linkage column: agents are not tied to a
+-- single queue at this table's row level.
+CREATE TABLE IF NOT EXISTS qagent (
+    agent_id INT AUTO_INCREMENT PRIMARY KEY,
+    agent VARCHAR(128) NOT NULL
 );
 
+-- Event-type lookup. A dimension table (id + label), NOT an event log.
+CREATE TABLE IF NOT EXISTS qevent (
+    event_id INT AUTO_INCREMENT PRIMARY KEY,
+    event VARCHAR(64) NOT NULL
+);
+
+-- One row per call event. The FK column names are unusual and deliberate:
+-- `qname` is the FK to qname.queue_id (same name as the table it points at),
+-- likewise `qagent` and `qevent`. `uniqueid` is the Asterisk call id and the
+-- join key to recordings.
 CREATE TABLE IF NOT EXISTS queue_stats (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    queue_id INT NOT NULL,
-    agent_id VARCHAR(32) NULL,
-    call_id VARCHAR(64) NOT NULL,
-    event_type VARCHAR(32) NOT NULL,
-    wait_seconds INT NOT NULL DEFAULT 0,
-    talk_seconds INT NOT NULL DEFAULT 0,
-    started_at DATETIME NOT NULL,
-    ended_at DATETIME NULL,
-    KEY idx_queue_stats_queue_id (queue_id),
-    KEY idx_queue_stats_call_id (call_id)
+    queue_stats_id INT AUTO_INCREMENT PRIMARY KEY,
+    datetime DATETIME NOT NULL,
+    qname INT NOT NULL,
+    qagent INT NULL,
+    qevent INT NULL,
+    uniqueid VARCHAR(64) NULL,
+    KEY idx_queue_stats_qname (qname),
+    KEY idx_queue_stats_uniqueid (uniqueid)
 );
 
+-- Only the three datetime columns the Eloquent model casts are confirmed.
+-- Their presence (connect + end per row) indicates call-lifecycle
+-- granularity, NOT a daily aggregate rollup.
 CREATE TABLE IF NOT EXISTS queue_stats_mv (
-    queue_id INT NOT NULL,
-    stat_date DATE NOT NULL,
-    total_calls INT NOT NULL DEFAULT 0,
-    answered_calls INT NOT NULL DEFAULT 0,
-    abandoned_calls INT NOT NULL DEFAULT 0,
-    avg_wait_seconds DECIMAL(10,2) NOT NULL DEFAULT 0,
-    avg_talk_seconds DECIMAL(10,2) NOT NULL DEFAULT 0,
-    PRIMARY KEY (queue_id, stat_date)
-);
-
-CREATE TABLE IF NOT EXISTS queue_events (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    queue_id INT NOT NULL,
-    agent_id VARCHAR(32) NOT NULL,
-    event_type VARCHAR(32) NOT NULL,
-    event_time DATETIME NOT NULL,
-    metadata VARCHAR(512) NULL,
-    KEY idx_queue_events_queue_id (queue_id)
+    datetime DATETIME NOT NULL,
+    datetimeconnect DATETIME NULL,
+    datetimeend DATETIME NULL
 );
 
+-- PK is `uniqueid`: a STRING, not an auto-increment int.
 CREATE TABLE IF NOT EXISTS recordings (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    call_id VARCHAR(64) NOT NULL,
-    queue_id INT NOT NULL,
-    agent_id VARCHAR(32) NULL,
-    file_path VARCHAR(512) NOT NULL,
-    duration_seconds INT NOT NULL DEFAULT 0,
-    recorded_at DATETIME NOT NULL,
-    KEY idx_recordings_call_id (call_id)
+    uniqueid VARCHAR(64) NOT NULL PRIMARY KEY,
+    filename VARCHAR(255) NOT NULL
 );
 
--- Seed data so ListQueues / ListAgents return something on a fresh local boot.
-INSERT INTO queue_names (id, extension, name) VALUES
-    (1, '6001', 'Sales'),
-    (2, '6002', 'Support')
-ON DUPLICATE KEY UPDATE name = VALUES(name);
+INSERT INTO qname (queue_id, queue) VALUES
+    (1, 'Sales'),
+    (2, 'Support');
 
-INSERT INTO queue_agents (id, agent_id, name, queue_id) VALUES
-    (1, '101', 'Ahmad', 1),
-    (2, '102', 'Siti', 2)
-ON DUPLICATE KEY UPDATE name = VALUES(name);
+INSERT INTO qagent (agent_id, agent) VALUES
+    (101, 'Ahmad'),
+    (102, 'Siti');
+
+INSERT INTO qevent (event_id, event) VALUES
+    (1, 'COMPLETEAGENT'),
+    (2, 'COMPLETECALLER'),
+    (3, 'ABANDON'),
+    (4, 'EXITWITHTIMEOUT');
+
+INSERT INTO recordings (uniqueid, filename) VALUES
+    ('1758358812.101', '1758358812.101.wav');
+
+INSERT INTO queue_stats (datetime, qname, qagent, qevent, uniqueid) VALUES
+    ('2026-09-20 09:00:12', 1, 101, 1, '1758358812.101'),
+    ('2026-09-20 10:01:30', 2, NULL, 3, '1758362490.102');

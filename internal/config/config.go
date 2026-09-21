@@ -5,6 +5,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -30,6 +31,17 @@ type Config struct {
 	IncomingAPIKey        string
 	IncomingSecret         string
 	IncomingHMACTolerance time.Duration
+
+	// End-user authentication (browser -> this service). Separate from the
+	// HMAC above, which is service-to-service only; see internal/auth.
+	JWTSecret     string
+	JWTTTL        time.Duration
+	DevAdminPassword string
+	DevAgentPassword string
+
+	// Origins allowed to call this service from a browser (the Angular dev
+	// server runs on a different port, so same-origin does not apply).
+	CORSOrigins []string
 
 	// qstats direct-read database.
 	QstatsDSN string
@@ -61,6 +73,13 @@ func Load() Config {
 		IncomingAPIKey:        getenv("INCOMING_HMAC_API_KEY", ""),
 		IncomingSecret:        getenv("INCOMING_HMAC_SECRET", ""),
 		IncomingHMACTolerance: getduration("INCOMING_HMAC_TOLERANCE_SECONDS", 5*time.Minute),
+
+		JWTSecret:        getenv("JWT_SECRET", ""),
+		JWTTTL:           getduration("JWT_TTL_SECONDS", 8*time.Hour),
+		DevAdminPassword: getenv("DEV_ADMIN_PASSWORD", ""),
+		DevAgentPassword: getenv("DEV_AGENT_PASSWORD", ""),
+
+		CORSOrigins: getlist("CORS_ORIGINS", []string{"http://localhost:4200"}),
 
 		QstatsDSN: getenv("QSTATS_DSN", ""),
 
@@ -95,6 +114,24 @@ func getbool(key string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+func getlist(key string, fallback []string) []string {
+	v, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(v) == "" {
+		return fallback
+	}
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return fallback
+	}
+	return out
 }
 
 func getduration(key string, fallbackSeconds time.Duration) time.Duration {

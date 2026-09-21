@@ -1,0 +1,133 @@
+<app-page-header
+  title="Unanswered Calls"
+  description="Calls that left a queue without being answered, and why."
+/>
+
+<!-- Toolbar: search + (future) Filters toggle. The magnifier sits INSIDE the
+     input rather than as a button beside it — see docs/ui-design-spec.md §5.1. -->
+<div class="mt-6 flex shrink-0 items-center gap-2">
+  <div class="relative flex-1">
+    <span
+      class="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
+    >
+      <app-icon name="search" />
+    </span>
+    <input
+      type="search"
+      class="input w-full pl-9"
+      placeholder="Search caller, queue or agent…"
+      aria-label="Search unanswered calls"
+      [value]="search"
+      (input)="onSearchInput($event)"
+    />
+  </div>
+  <button type="button" class="btn btn-outline" (click)="load()">Refresh</button>
+</div>
+
+@if (searchTerm()) {
+  <p class="text-muted-foreground mt-2 text-xs">
+    Filtering the loaded page only — not a server-side search.
+  </p>
+}
+
+@if (loading()) {
+  <div class="mt-6 flex justify-center py-12">
+    <div
+      class="border-muted-foreground/30 border-t-foreground size-6 animate-spin rounded-full border-2"
+    ></div>
+  </div>
+} @else if (failed()) {
+  <div class="mt-6 rounded-md border p-6 text-center">
+    <p class="text-muted-foreground text-sm">Could not load unanswered calls.</p>
+    <button type="button" class="btn btn-outline btn-sm mt-3" (click)="load()">Try again</button>
+  </div>
+} @else {
+  <div class="card mt-4 overflow-hidden">
+    @if (visibleRows().length === 0) {
+      <p class="text-muted-foreground px-4 py-12 text-center text-sm">
+        @if (searchTerm()) {
+          Nothing on this page matches “{{ searchTerm() }}”.
+        } @else {
+          No unanswered calls in this window.
+        }
+      </p>
+    } @else {
+      <table class="w-full text-sm">
+        <thead class="text-muted-foreground border-b">
+          <tr>
+            <th class="px-4 py-2 text-left font-medium">Time</th>
+            <th class="px-4 py-2 text-left font-medium">Caller</th>
+            <th class="px-4 py-2 text-left font-medium">Queue</th>
+            <th class="px-4 py-2 text-left font-medium">Event</th>
+            <th class="px-4 py-2 text-right font-medium">Waited</th>
+            <th class="px-4 py-2 text-right font-medium">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of visibleRows(); track row.uniqueid) {
+            <tr class="border-b last:border-0">
+              <td class="px-4 py-2 whitespace-nowrap">{{ row.datetime }}</td>
+              <td class="px-4 py-2">{{ row.caller_id }}</td>
+              <td class="px-4 py-2">{{ row.queue_name }}</td>
+              <td class="px-4 py-2">
+                <span class="badge badge-secondary">{{ row.event }}</span>
+              </td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ duration(row.hold_time) }}</td>
+              <td class="px-4 py-2 text-right">
+                <!-- Gated on the same permission the Livewire original checks.
+                     Hiding it is a courtesy — the server refuses regardless. -->
+                <button
+                  *hasPermission="'call-center.unanswered-calls.callback'"
+                  type="button"
+                  class="btn btn-outline btn-sm"
+                  (click)="askCallback(row)"
+                >
+                  <app-icon name="phone-call" [size]="14" />
+                  Call back
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+
+  @if (meta(); as m) {
+    <p class="text-muted-foreground mt-3 text-xs">
+      Showing {{ visibleRows().length }} of {{ m.total }} — page {{ m.page }} of {{ m.last_page }}
+    </p>
+  }
+}
+
+<!-- Confirm before recording an attempt: it writes a row and, once the dial
+     half is wired, places a real call. -->
+@if (confirming(); as row) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div class="card w-[26rem] max-w-[calc(100vw-2rem)] p-6">
+      <h2 class="text-base font-semibold">Call back {{ row.caller_id }}?</h2>
+      <p class="text-muted-foreground mt-2 text-sm">
+        This records a callback attempt against your account. It does not dial yet — the softphone
+        handover is not wired up.
+      </p>
+      <div class="mt-6 flex justify-end gap-2">
+        <button
+          type="button"
+          class="btn btn-outline"
+          [disabled]="callingBack()"
+          (click)="cancelCallback()"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn-default"
+          [disabled]="callingBack()"
+          (click)="confirmCallback()"
+        >
+          {{ callingBack() ? 'Recording…' : 'Record attempt' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

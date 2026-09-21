@@ -28,20 +28,20 @@ var _ ReportsClient = (*JWTClient)(nil)
 
 var errNotImplemented = fmt.Errorf("pbxworker: v3 (JWT) client not implemented yet — TODO confirm /wmpbxworker endpoints against reference code")
 
-func (c *JWTClient) QueueNames(ctx context.Context) ([]QueueName, error) { return nil, errNotImplemented }
-func (c *JWTClient) AgentNames(ctx context.Context) ([]AgentName, error) { return nil, errNotImplemented }
-func (c *JWTClient) AnsweredCalls(ctx context.Context, p ListParams) ([]AnsweredCall, Pagination, error) {
-	return nil, Pagination{}, errNotImplemented
+func (c *JWTClient) QueueNames(ctx context.Context) ([]string, error) { return nil, errNotImplemented }
+func (c *JWTClient) AgentNames(ctx context.Context) ([]string, error) { return nil, errNotImplemented }
+func (c *JWTClient) AnsweredCalls(ctx context.Context, p ListParams) ([]AnsweredCall, error) {
+	return nil, errNotImplemented
 }
-func (c *JWTClient) UnansweredCalls(ctx context.Context, p ListParams) ([]UnansweredCall, Pagination, error) {
-	return nil, Pagination{}, errNotImplemented
+func (c *JWTClient) UnansweredCalls(ctx context.Context, p ListParams) ([]UnansweredCall, error) {
+	return nil, errNotImplemented
 }
-func (c *JWTClient) AgentEvents(ctx context.Context, p ListParams) ([]AgentEvent, Pagination, error) {
-	return nil, Pagination{}, errNotImplemented
+func (c *JWTClient) AgentEvents(ctx context.Context, p ListParams) ([]AgentEvent, error) {
+	return nil, errNotImplemented
 }
-func (c *JWTClient) CallSearch(ctx context.Context, p CallSearchParams) ([]CallSummary, Pagination, error) {
-	return nil, Pagination{}, errNotImplemented
+func (c *JWTClient) CallSearch(ctx context.Context, p CallSearchParams) ([]CallSearchResult, error) {
+	return nil, errNotImplemented
 }
-func (c *JWTClient) CallDetail(ctx context.Context, callID string) (*CallDetail, error) {
+func (c *JWTClient) CallDetail(ctx context.Context, uniqueID string) ([]CallDetailRow, error) {
 	return nil, errNotImplemented
 }

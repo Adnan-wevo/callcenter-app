@@ -1,0 +1,9 @@
+{
+  "go.goroot": "/home/adnan/.local/go",
+  "go.toolsEnvVars": {
+    "PATH": "/home/adnan/.local/go/bin:${env:PATH}"
+  },
+  "terminal.integrated.env.linux": {
+    "PATH": "/home/adnan/.local/go/bin:${env:PATH}"
+  }
+}

@@ -10,10 +10,10 @@ import (
 
 // GET /api/v1/call-center/queues
 //
-// ASSUMPTION: sourced from qstats.queue_names directly (not the pbx-worker
-// queue-names action) — see README "Open questions" for why this side was
-// picked, and internal/gateway/pbxworker.HMACClient.QueueNames for the
-// unused alternative implementation.
+// Sourced from qstats.qname directly. Whether this should instead go
+// through pbxworker.ReportsClient.QueueNames (matching how Laravel
+// actually sources queue names — see PbxReportGateway.php) is an open
+// decision, not resolved by this fix; see README.
 func (h *Handlers) ListQueues(c *gin.Context) {
 	rows, err := h.qstats.ListQueueNames(c.Request.Context())
 	if err != nil {
@@ -25,20 +25,12 @@ func (h *Handlers) ListQueues(c *gin.Context) {
 
 // GET /api/v1/call-center/agents
 //
-// ASSUMPTION: sourced from qstats.queue_agents directly — same rationale as
-// ListQueues above. Optional ?queue_id= filter.
+// Sourced from qstats.qagent directly — same open-decision caveat as
+// ListQueues above. The real qagent table has no queue-linkage column, so
+// there is no per-queue filter here (an earlier version of this handler
+// assumed a queue_id filter the schema doesn't support).
 func (h *Handlers) ListAgents(c *gin.Context) {
-	var queueID *int64
-	if v := c.Query("queue_id"); v != "" {
-		id, err := parseInt64(v)
-		if err != nil {
-			apires.Error(c, http.StatusBadRequest, "invalid queue_id", nil)
-			return
-		}
-		queueID = &id
-	}
-
-	rows, err := h.qstats.ListQueueAgents(c.Request.Context(), queueID)
+	rows, err := h.qstats.ListQueueAgents(c.Request.Context())
 	if err != nil {
 		apires.Error(c, http.StatusBadGateway, "failed to load agents", nil)
 		return

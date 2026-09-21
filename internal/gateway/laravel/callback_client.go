@@ -6,11 +6,12 @@
 // in-process. After extraction, that's no longer possible (different
 // process/service), so it becomes an HTTP call back to Laravel instead.
 //
-// TODO: everything about this endpoint is unconfirmed — path, payload
-// shape, response shape, and even whether Laravel will require this exact
-// HMAC scheme or something else on its inbound side. Confirm all of it
-// once the reference code lands; this is a best-effort placeholder so the
-// rest of the service has something to call.
+// The PAYLOAD is now confirmed against the real Action (see CallbackRequest).
+// The ENDPOINT is not: Modules/Callback has no routes/api.php, no controller
+// and no mapApiRoutes() — the Laravel side of this does not exist yet and
+// must be built. The path to build it at is open decision D5; the convention
+// to mirror is Modules/SoftPhone's HMAC-verified webhook route. See
+// docs/extraction-plan.md §6.
 package laravel
 
 import (
@@ -20,20 +21,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	"callcenter-service/internal/security/hmacsig"
 )
 
-// CallbackRequest is an ASSUMPTION of what Laravel's Callback module needs
-// to record an ad-hoc callback attempt. Confirm field names/types against
-// the original in-process call once reference code lands.
+// CallbackRequest mirrors the real Action's signature —
+// RecordAdHocCallbackAttempt::handle(string $phoneNumber, string $agentId)
+// in Modules/Callback/app/Actions. Those two arguments are the whole input;
+// the Action hardcodes candidate_id (null), dialed_at (now) and outcome
+// (Pending) itself.
+//
+// An earlier version of this struct carried unanswered_call_id, queue_id,
+// attempted_at and note. None of them exist in the Action's signature, and
+// phone_number — the one field that matters — was missing entirely.
 type CallbackRequest struct {
-	UnansweredCallID string  `json:"unanswered_call_id"`
-	QueueID           string  `json:"queue_id"`
-	AgentID           string  `json:"agent_id"`
-	AttemptedAt        time.Time `json:"attempted_at"`
-	Note                *string  `json:"note,omitempty"`
+	PhoneNumber string `json:"phone_number"`
+	AgentID     string `json:"agent_id"`
 }
 
 // CallbackClient records an ad-hoc callback attempt in Laravel.
