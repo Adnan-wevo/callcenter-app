@@ -14,6 +14,7 @@ import (
 	"callcenter-service/internal/gateway/laravel"
 	"callcenter-service/internal/gateway/pbxworker"
 	"callcenter-service/internal/reports"
+	"callcenter-service/internal/softphone"
 )
 
 type Handlers struct {
@@ -21,6 +22,7 @@ type Handlers struct {
 	pbx             pbxworker.ReportsClient
 	laravelCallback laravel.CallbackClient
 	auth            *auth.Service
+	softphone       *softphone.Service
 }
 
 func New(
@@ -28,12 +30,14 @@ func New(
 	pbx pbxworker.ReportsClient,
 	laravelCallback laravel.CallbackClient,
 	authSvc *auth.Service,
+	softphoneSvc *softphone.Service,
 ) *Handlers {
 	return &Handlers{
 		qstats:          qstatsRepo,
 		pbx:             pbx,
 		laravelCallback: laravelCallback,
 		auth:            authSvc,
+		softphone:       softphoneSvc,
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"callcenter-service/internal/gateway/pbxworker"
 	"callcenter-service/internal/handlers"
 	"callcenter-service/internal/security/hmacsig"
+	"callcenter-service/internal/softphone"
 )
 
 func main() {
@@ -57,7 +58,45 @@ func main() {
 	}
 	authSvc := auth.NewService(userStore, cfg.JWTSecret, cfg.JWTTTL)
 
-	h := handlers.New(qstatsRepo, pbxClient, callbackClient, authSvc)
+	// The SIP extension directory. Seeded for local use, for the same reason
+	// the user store is: the product owns this data (a customer deployment has
+	// no heal-crm to read it from), but the real backing table is not built
+	// yet. See internal/softphone.
+	extensionStore := softphone.NewStore()
+	if cfg.DevSIPExtension != "" {
+		for _, id := range []string{
+			"00000000-0000-0000-0000-000000000001",
+			"00000000-0000-0000-0000-000000000002",
+		} {
+			extensionStore.Assign(id, []softphone.Extension{{
+				Extension:   cfg.DevSIPExtension,
+				DisplayName: cfg.DevSIPExtension,
+				Password:    cfg.DevSIPPassword,
+				IsDefault:   true,
+				Queues:      []string{},
+			}})
+		}
+		log.Printf("softphone: seeded dev extension %s", cfg.DevSIPExtension)
+	} else {
+		log.Printf("softphone: no DEV_SIP_EXTENSION set — the phone will report no extension assigned")
+	}
+
+	softphoneSvc := softphone.NewService(
+		extensionStore,
+		softphone.PBX{
+			Server:    cfg.PBXHost,
+			Port:      cfg.PBXWSPort,
+			WSPath:    cfg.PBXWSPath,
+			Transport: cfg.PBXTransport,
+		},
+		softphone.SupervisorCodes{
+			SpyMonitor: cfg.SpyMonitorCode,
+			SpyWhisper: cfg.SpyWhisperCode,
+			SpyBarge:   cfg.SpyBargeCode,
+		},
+	)
+
+	h := handlers.New(qstatsRepo, pbxClient, callbackClient, authSvc, softphoneSvc)
 	router := handlers.NewRouter(h, authSvc, cfg.CORSOrigins)
 
 	addr := ":" + cfg.HTTPPort

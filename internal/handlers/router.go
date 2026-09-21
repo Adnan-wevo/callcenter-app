@@ -51,6 +51,11 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 	{
 		secure.GET("/me/authority", h.MyAuthority)
 
+		// The softphone's own credentials. Gated by authentication alone:
+		// every agent who may sign in may register a phone, and there is no
+		// separate "may use the phone" permission in the catalogue.
+		secure.GET("/softphone/bootstrap", h.SoftphoneBootstrap)
+
 		cc := secure.Group("/call-center")
 		{
 			// Lookups feed the filter bar on every report screen, so they are

@@ -43,6 +43,19 @@ type Config struct {
 	// server runs on a different port, so same-origin does not apply).
 	CORSOrigins []string
 
+	// Softphone: where the browser's SIP user agent connects, and the
+	// supervisor feature codes. The PBX is the customer's own; these are
+	// deployment settings, not secrets.
+	PBXHost         string
+	PBXWSPort       int
+	PBXWSPath       string
+	PBXTransport    string
+	SpyMonitorCode  string
+	SpyWhisperCode  string
+	SpyBargeCode    string
+	DevSIPExtension string
+	DevSIPPassword  string
+
 	// qstats direct-read database.
 	QstatsDSN string
 
@@ -81,6 +94,16 @@ func Load() Config {
 
 		CORSOrigins: getlist("CORS_ORIGINS", []string{"http://localhost:4200"}),
 
+		PBXHost:         getenv("SOFTPHONE_PBX_HOST", ""),
+		PBXWSPort:       getint("SOFTPHONE_PBX_WS_PORT", 8089),
+		PBXWSPath:       getenv("SOFTPHONE_PBX_WS_PATH", "/ws"),
+		PBXTransport:    getenv("SOFTPHONE_PBX_TRANSPORT", "wss"),
+		SpyMonitorCode:  getenv("SOFTPHONE_SPY_MONITOR", "555"),
+		SpyWhisperCode:  getenv("SOFTPHONE_SPY_WHISPER", "556"),
+		SpyBargeCode:    getenv("SOFTPHONE_SPY_BARGE", "557"),
+		DevSIPExtension: getenv("DEV_SIP_EXTENSION", ""),
+		DevSIPPassword:  getenv("DEV_SIP_PASSWORD", ""),
+
 		QstatsDSN: getenv("QSTATS_DSN", ""),
 
 		PBXWorkerMode:     PBXWorkerMode(getenv("PBX_WORKER_MODE", string(PBXWorkerModeHMAC))),
@@ -114,6 +137,18 @@ func getbool(key string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+func getint(key string, fallback int) int {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 func getlist(key string, fallback []string) []string {
