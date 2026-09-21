@@ -1,0 +1,88 @@
+name: callcenter-service
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: qstats
+      MYSQL_USER: qstats
+      MYSQL_PASSWORD: qstatspass
+    ports:
+      - "3307:3306" # host 3307 -> avoid clashing with any local mysql on 3306
+    volumes:
+      - ./migrations/qstats:/docker-entrypoint-initdb.d:ro
+      - qstats-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Stands in for pbx-worker v2 during local testing.
+  mock-pbx-worker:
+    build:
+      context: .
+      args:
+        CMD_PATH: cmd/mockpbxworker
+    environment:
+      PORT: "8081"
+      HMAC_API_KEY: local-dev-key
+      HMAC_SECRET: local-dev-secret
+    ports:
+      - "8081:8081"
+
+  # Stands in for the Laravel monolith's callback-attempt endpoint during
+  # local testing (the one write-path this service calls out to).
+  mock-laravel:
+    build:
+      context: .
+      args:
+        CMD_PATH: cmd/mocklaravel
+    environment:
+      PORT: "8082"
+      CALLBACK_PATH: /api/internal/call-center/callback-attempts
+      HMAC_API_KEY: local-dev-key
+      HMAC_SECRET: local-dev-secret
+    ports:
+      - "8092:8082" # host 8092: 8082 is taken by an existing local stack (laravelcrm2_local_phpmyadmin) on this machine
+
+  callcenter-service:
+    build:
+      context: .
+      args:
+        CMD_PATH: cmd/server
+    environment:
+      APP_ENV: local
+      HTTP_PORT: "8080"
+
+      # Inbound auth. Disabled by default for local dev convenience — see
+      # README "Open questions". Flip to false + use cmd/hmacsign to test
+      # the real HMAC path.
+      INCOMING_AUTH_DISABLED: "true"
+      INCOMING_HMAC_API_KEY: local-dev-key
+      INCOMING_HMAC_SECRET: local-dev-secret
+
+      QSTATS_DSN: "qstats:qstatspass@tcp(mysql:3306)/qstats?parseTime=true"
+
+      PBX_WORKER_MODE: hmac
+      PBX_WORKER_BASE_URL: "http://mock-pbx-worker:8081"
+      PBX_WORKER_API_KEY: local-dev-key
+      PBX_WORKER_SECRET: local-dev-secret
+
+      LARAVEL_CALLBACK_BASE_URL: "http://mock-laravel:8082"
+      LARAVEL_CALLBACK_PATH: /api/internal/call-center/callback-attempts
+      LARAVEL_CALLBACK_API_KEY: local-dev-key
+      LARAVEL_CALLBACK_SECRET: local-dev-secret
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mock-pbx-worker:
+        condition: service_started
+      mock-laravel:
+        condition: service_started
+
+volumes:
+  qstats-data:
