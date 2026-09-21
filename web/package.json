@@ -17,6 +17,7 @@
     "@angular/platform-browser": "^21.2.0",
     "@angular/router": "^21.2.0",
     "@tailwindcss/postcss": "^4.1.0",
+    "jssip": "^3.13.8",
     "postcss": "^8.5.0",
     "rxjs": "~7.8.0",
     "tailwindcss": "^4.1.0",
