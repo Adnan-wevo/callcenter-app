@@ -34,7 +34,7 @@ func (h *Handlers) SoftphoneBootstrap(c *gin.Context) {
 		return
 	}
 
-	bootstrap, err := h.softphone.BootstrapFor(user.ID)
+	bootstrap, err := h.softphone.BootstrapFor(c.Request.Context(), user.ID)
 	if err != nil {
 		if errors.Is(err, softphone.ErrNoExtension) {
 			apires.Error(c, http.StatusNotFound, "no SIP extension is assigned to your account", nil)

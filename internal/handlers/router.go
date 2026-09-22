@@ -91,6 +91,17 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 			sp.POST("/queue/spy", supervise, h.QueueSpy)
 		}
 
+		// SIP extension administration — who may register as which
+		// extension. Same four permission names as heal-crm's own
+		// SipExtensions\Index Livewire component.
+		admin := secure.Group("/admin/sip-extensions")
+		{
+			admin.GET("", middleware.RequirePermission(auth.PermSIPExtensionsIndex), h.ListSIPExtensions)
+			admin.POST("", middleware.RequirePermission(auth.PermSIPExtensionsStore), h.CreateSIPExtension)
+			admin.PUT("/:id", middleware.RequirePermission(auth.PermSIPExtensionsUpdate), h.UpdateSIPExtension)
+			admin.DELETE("/:id", middleware.RequirePermission(auth.PermSIPExtensionsDestroy), h.DeleteSIPExtension)
+		}
+
 		cc := secure.Group("/call-center")
 		{
 			// Lookups feed the filter bar on every report screen, so they are

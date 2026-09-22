@@ -43,7 +43,7 @@ func (h *Handlers) CreateCallLog(c *gin.Context) {
 	}
 
 	extension := ""
-	if ext, ok := h.softphone.ExtensionFor(user.ID); ok {
+	if ext, ok := h.softphone.ExtensionFor(c.Request.Context(), user.ID); ok {
 		extension = ext
 	}
 
@@ -77,7 +77,7 @@ func (h *Handlers) MarkCallAnswered(c *gin.Context) {
 	}
 
 	extension := ""
-	if ext, ok := h.softphone.ExtensionFor(user.ID); ok {
+	if ext, ok := h.softphone.ExtensionFor(c.Request.Context(), user.ID); ok {
 		extension = ext
 	}
 

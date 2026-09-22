@@ -15,7 +15,9 @@
 // In heal-crm these rows live in the monolith's own tables. This service is
 // being packaged as a standalone product, so a customer deployment has no
 // heal-crm database to read: the extension directory has to belong to the
-// product or the softphone cannot register at all.
+// product or the softphone cannot register at all. See repository.go for
+// the real, MySQL-backed store (migrations/callcenter/002_sip_extensions.sql),
+// which replaced an in-memory placeholder this package started with.
 //
 // # Credentials
 //
@@ -25,23 +27,28 @@
 //   - served only over an authenticated route, to the agent it belongs to
 //   - never logged
 //   - never included in any list/index response, only in this one bootstrap
-//
-// Storing it recoverably is unavoidable: SIP digest auth needs the plaintext
-// (or the HA1 hash) to compute a response, so it cannot be one-way hashed
-// the way a login password is. That is a property of SIP, not a shortcut —
-// but it does mean this store deserves encryption at rest before the product
-// ships. See the TODO below.
+//   - encrypted at rest (crypto.go, AES-256-GCM) — recoverably, not hashed:
+//     SIP digest auth needs the plaintext, unlike a login password.
 package softphone
 
 import (
+	"context"
 	"errors"
 	"strings"
-	"sync"
 )
 
-var ErrNoExtension = errors.New("softphone: no SIP extension assigned to this user")
+var (
+	ErrNoExtension = errors.New("softphone: no SIP extension assigned to this user")
+)
 
 // Extension is one SIP account an agent may register as.
+//
+// The real schema (see repository.go) allows AT MOST ONE per user — the
+// slice-shaped API here (ExtensionFor/BootstrapFor's Extensions field)
+// exists for compatibility with a client written against heal-crm's own
+// aspirational "several extensions, switch between them" design, which its
+// own database does not actually allow (see the migration's own doc
+// comment for the discrepancy). It will always hold zero or one item.
 type Extension struct {
 	Extension    string   `json:"extension"`
 	DisplayName  string   `json:"display_name"`
@@ -77,7 +84,6 @@ type Bootstrap struct {
 	WSPath    string `json:"ws_path"`
 	Transport string `json:"transport"`
 
-	// The extension this session registers as: the agent's default.
 	Extension   string   `json:"extension"`
 	DisplayName string   `json:"display_name"`
 	Password    string   `json:"password"`
@@ -86,101 +92,50 @@ type Bootstrap struct {
 	IsSupervisor bool            `json:"is_supervisor"`
 	Supervisor   SupervisorCodes `json:"supervisor"`
 
-	// Every extension this agent may register as, so a supervisor with more
-	// than one can switch without signing out. Passwords are omitted.
+	// See Extension's own doc comment for why this is a list of at most one.
 	Extensions []Extension `json:"extensions"`
 }
 
-// Store maps a user to the SIP extensions they may register as.
-//
-// TODO: this is in-memory and seeded at startup, which matches the rest of
-// the local store (see internal/auth). Before the product ships it needs a
-// real backing table with the passwords ENCRYPTED AT REST — see the package
-// doc for why hashing is not an option.
-type Store struct {
-	mu     sync.RWMutex
-	byUser map[string][]Extension
-}
-
-func NewStore() *Store {
-	return &Store{byUser: make(map[string][]Extension)}
-}
-
-// Assign replaces the extensions available to a user.
-func (s *Store) Assign(userID string, extensions []Extension) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.byUser[userID] = extensions
-}
-
-// ForUser returns the user's extensions, default first.
-func (s *Store) ForUser(userID string) ([]Extension, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	ext, ok := s.byUser[userID]
-	return ext, ok && len(ext) > 0
-}
-
-// Service builds the bootstrap payload.
+// Service builds the bootstrap payload from the real SIP extension
+// directory.
 type Service struct {
-	store      *Store
+	repo       *Repository
 	pbx        PBX
 	supervisor SupervisorCodes
 }
 
-func NewService(store *Store, pbx PBX, supervisor SupervisorCodes) *Service {
-	return &Service{store: store, pbx: pbx, supervisor: supervisor}
-}
-
-// primaryExtension picks the default extension, falling back to the first
-// row: an agent with extensions but none marked default should still get a
-// phone rather than an error. Shared by BootstrapFor and ExtensionFor so
-// both agree on which extension is "the" one for a user with several.
-func (s *Service) primaryExtension(userID string) (Extension, []Extension, bool) {
-	extensions, ok := s.store.ForUser(userID)
-	if !ok {
-		return Extension{}, nil, false
-	}
-	primary := extensions[0]
-	for _, e := range extensions {
-		if e.IsDefault {
-			primary = e
-			break
-		}
-	}
-	return primary, extensions, true
+func NewService(repo *Repository, pbx PBX, supervisor SupervisorCodes) *Service {
+	return &Service{repo: repo, pbx: pbx, supervisor: supervisor}
 }
 
 // ExtensionFor returns just the extension NUMBER (never the password) for
-// a user's primary SIP account, for callers that need to stamp a call log
-// row with "who handled this" without needing the full bootstrap payload.
-func (s *Service) ExtensionFor(userID string) (string, bool) {
-	primary, _, ok := s.primaryExtension(userID)
-	if !ok {
+// a user's SIP account, for callers that need to stamp a call log row with
+// "who handled this" without needing the full bootstrap payload.
+func (s *Service) ExtensionFor(ctx context.Context, userID string) (string, bool) {
+	ext, ok, err := s.repo.ForUser(ctx, userID)
+	if err != nil || !ok {
 		return "", false
 	}
-	return primary.Extension, true
+	return ext.Extension, true
 }
 
 // BootstrapFor assembles the payload for one user.
-func (s *Service) BootstrapFor(userID string) (*Bootstrap, error) {
-	primary, extensions, ok := s.primaryExtension(userID)
+func (s *Service) BootstrapFor(ctx context.Context, userID string) (*Bootstrap, error) {
+	ext, ok, err := s.repo.ForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, ErrNoExtension
 	}
 
-	// The listed extensions carry no passwords — only the one being
-	// registered is disclosed, and only to its owner.
-	listed := make([]Extension, 0, len(extensions))
-	for _, e := range extensions {
-		e.Password = ""
-		if e.Queues == nil {
-			e.Queues = []string{}
-		}
-		listed = append(listed, e)
+	listed := ext
+	listed.Password = ""
+	if listed.Queues == nil {
+		listed.Queues = []string{}
 	}
 
-	queues := primary.Queues
+	queues := ext.Queues
 	if queues == nil {
 		queues = []string{}
 	}
@@ -190,13 +145,13 @@ func (s *Service) BootstrapFor(userID string) (*Bootstrap, error) {
 		Port:         s.pbx.Port,
 		WSPath:       s.pbx.WSPath,
 		Transport:    s.pbx.Transport,
-		Extension:    primary.Extension,
-		DisplayName:  displayName(primary),
-		Password:     primary.Password,
+		Extension:    ext.Extension,
+		DisplayName:  displayName(ext),
+		Password:     ext.Password,
 		Queues:       queues,
-		IsSupervisor: primary.IsSupervisor,
+		IsSupervisor: ext.IsSupervisor,
 		Supervisor:   s.supervisor,
-		Extensions:   listed,
+		Extensions:   []Extension{listed},
 	}, nil
 }
 

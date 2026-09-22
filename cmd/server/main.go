@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -79,31 +80,45 @@ func main() {
 	}
 	authSvc := auth.NewService(userStore, cfg.JWTSecret, cfg.JWTTTL)
 
-	// The SIP extension directory. Seeded for local use, for the same reason
-	// the user store is: the product owns this data (a customer deployment has
-	// no heal-crm to read it from), but the real backing table is not built
-	// yet. See internal/softphone.
-	extensionStore := softphone.NewStore()
+	// The SIP extension directory: a real table now (sip_extensions, in the
+	// same callcenter database as call_logs), not the in-memory placeholder
+	// an earlier round of this service used. See internal/softphone.
+	if cfg.SIPEncryptionKey == "" {
+		log.Fatal("SIP_ENCRYPTION_KEY is not set — refusing to start without a key to encrypt SIP passwords at rest")
+	}
+	encryptor, err := softphone.NewEncryptor(cfg.SIPEncryptionKey)
+	if err != nil {
+		log.Fatalf("softphone encryptor: %v", err)
+	}
+	sipExtensionRepo := softphone.NewRepository(ccDB, encryptor)
+
+	// Optional local-dev convenience: give the seeded admin account (see
+	// auth.NewDevStore) a working extension out of the box, so
+	// GET secure/softphone/bootstrap has something to return on a fresh
+	// stack without anyone having to call the admin API first. This is a
+	// single row for a single user — sip_extensions.user_id is UNIQUE in
+	// the real schema (see migrations/callcenter/002_sip_extensions.sql's
+	// own doc comment), so this can seed ONE account, not the two the
+	// earlier in-memory version incorrectly gave the same extension number.
 	if cfg.DevSIPExtension != "" {
-		for _, id := range []string{
-			"00000000-0000-0000-0000-000000000001",
-			"00000000-0000-0000-0000-000000000002",
-		} {
-			extensionStore.Assign(id, []softphone.Extension{{
-				Extension:   cfg.DevSIPExtension,
-				DisplayName: cfg.DevSIPExtension,
-				Password:    cfg.DevSIPPassword,
-				IsDefault:   true,
-				Queues:      []string{},
-			}})
+		const adminID = "00000000-0000-0000-0000-000000000001"
+		if _, exists, ferr := sipExtensionRepo.ForUser(context.Background(), adminID); ferr == nil && !exists {
+			_, cerr := sipExtensionRepo.Create(context.Background(), softphone.CreateInput{
+				UserID: adminID, Extension: cfg.DevSIPExtension, SIPUsername: cfg.DevSIPExtension,
+				SIPPassword: cfg.DevSIPPassword, DisplayName: cfg.DevSIPExtension, IsDefault: true,
+			})
+			if cerr != nil {
+				log.Printf("softphone: could not seed dev extension: %v", cerr)
+			} else {
+				log.Printf("softphone: seeded dev extension %s for the admin account", cfg.DevSIPExtension)
+			}
 		}
-		log.Printf("softphone: seeded dev extension %s", cfg.DevSIPExtension)
 	} else {
-		log.Printf("softphone: no DEV_SIP_EXTENSION set — the phone will report no extension assigned")
+		log.Printf("softphone: no DEV_SIP_EXTENSION set — assign one via the admin API (POST secure/admin/sip-extensions)")
 	}
 
 	softphoneSvc := softphone.NewService(
-		extensionStore,
+		sipExtensionRepo,
 		softphone.PBX{
 			Server:    cfg.PBXHost,
 			Port:      cfg.PBXWSPort,
@@ -117,7 +132,7 @@ func main() {
 		},
 	)
 
-	h := handlers.New(qstatsRepo, pbxClient, callbackClient, authSvc, softphoneSvc, callLogRepo, pbxControlClient)
+	h := handlers.New(qstatsRepo, pbxClient, callbackClient, authSvc, softphoneSvc, callLogRepo, pbxControlClient, sipExtensionRepo)
 	router := handlers.NewRouter(h, authSvc, cfg.CORSOrigins)
 
 	addr := ":" + cfg.HTTPPort

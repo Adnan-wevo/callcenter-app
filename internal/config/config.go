@@ -56,6 +56,10 @@ type Config struct {
 	DevSIPExtension string
 	DevSIPPassword  string
 
+	// SIP extension password encryption at rest. See
+	// internal/softphone/crypto.go. Generate with: openssl rand -base64 32
+	SIPEncryptionKey string
+
 	// qstats direct-read database.
 	QstatsDSN string
 
@@ -118,6 +122,8 @@ func Load() Config {
 		SpyBargeCode:    getenv("SOFTPHONE_SPY_BARGE", "557"),
 		DevSIPExtension: getenv("DEV_SIP_EXTENSION", ""),
 		DevSIPPassword:  getenv("DEV_SIP_PASSWORD", ""),
+
+		SIPEncryptionKey: getenv("SIP_ENCRYPTION_KEY", ""),
 
 		QstatsDSN:     getenv("QSTATS_DSN", ""),
 		CallCenterDSN: getenv("CALLCENTER_DSN", ""),

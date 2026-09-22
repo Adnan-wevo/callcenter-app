@@ -20,6 +20,7 @@ services:
       # own numbering matters since qstats' init creates a different DB.
       - ./migrations/qstats/001_init.sql:/docker-entrypoint-initdb.d/01_qstats_init.sql:ro
       - ./migrations/callcenter/001_init.sql:/docker-entrypoint-initdb.d/02_callcenter_init.sql:ro
+      - ./migrations/callcenter/002_sip_extensions.sql:/docker-entrypoint-initdb.d/03_sip_extensions_init.sql:ro
       - qstats-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
@@ -127,6 +128,12 @@ services:
       SOFTPHONE_PBX_TRANSPORT: wss
       DEV_SIP_EXTENSION: "1001"
       DEV_SIP_PASSWORD: local-dev-sip-password
+
+      # SIP extension passwords are encrypted at rest with this key (see
+      # internal/softphone/crypto.go). LOCAL DEV VALUE ONLY — generate a
+      # real one with `openssl rand -base64 32` for any real deployment,
+      # and never commit it.
+      SIP_ENCRYPTION_KEY: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
     ports:
       - "8080:8080"
     depends_on:

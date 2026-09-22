@@ -27,6 +27,7 @@ type Handlers struct {
 	softphone       *softphone.Service
 	callLogs        *calllog.Repository
 	pbxControl      *pbxcontrol.Client
+	sipExtensions   *softphone.Repository
 }
 
 func New(
@@ -37,6 +38,7 @@ func New(
 	softphoneSvc *softphone.Service,
 	callLogs *calllog.Repository,
 	pbxControl *pbxcontrol.Client,
+	sipExtensions *softphone.Repository,
 ) *Handlers {
 	return &Handlers{
 		qstats:          qstatsRepo,
@@ -46,6 +48,7 @@ func New(
 		softphone:       softphoneSvc,
 		callLogs:        callLogs,
 		pbxControl:      pbxControl,
+		sipExtensions:   sipExtensions,
 	}
 }
 

@@ -65,7 +65,7 @@ func (h *Handlers) interfaceFor(c *gin.Context) (string, bool) {
 		apires.Error(c, http.StatusUnauthorized, "authentication required", nil)
 		return "", false
 	}
-	ext, ok := h.softphone.ExtensionFor(user.ID)
+	ext, ok := h.softphone.ExtensionFor(c.Request.Context(), user.ID)
 	if !ok || ext == "" {
 		apires.Error(c, http.StatusNotFound, "no SIP extension is assigned to your account", nil)
 		return "", false

@@ -58,6 +58,14 @@ const (
 	// queue membership, only supervisor actions over OTHER agents' calls
 	// are gated.
 	PermSoftphoneSupervise = "softphone.supervise"
+
+	// SIP extension admin — same four names as
+	// Modules/SoftPhone/app/Livewire/SipExtensions/Index.php's own
+	// $this->authorize(...) calls.
+	PermSIPExtensionsIndex   = "call-center.sip-extensions.index"
+	PermSIPExtensionsStore   = "call-center.sip-extensions.store"
+	PermSIPExtensionsUpdate  = "call-center.sip-extensions.update"
+	PermSIPExtensionsDestroy = "call-center.sip-extensions.destroy"
 )
 
 // AllPermissions is the catalogue, in the order a UI would list it.
@@ -73,6 +81,10 @@ var AllPermissions = []string{
 	PermAgentPerformance,
 	PermDistribution,
 	PermSoftphoneSupervise,
+	PermSIPExtensionsIndex,
+	PermSIPExtensionsStore,
+	PermSIPExtensionsUpdate,
+	PermSIPExtensionsDestroy,
 }
 
 var (
