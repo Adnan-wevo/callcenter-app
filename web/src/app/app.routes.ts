@@ -43,6 +43,36 @@ export const routes: Routes = [
         (m) => m.UNANSWERED_CALLS_ROUTES,
       ),
   },
+  {
+    path: 'answered-calls',
+    canActivate: [authGuard, requirePermission('call-center.answered-calls.index')],
+    resolve: { authz: permissionsResolver },
+    loadChildren: () =>
+      import('./features/answered-calls/answered-calls.routes').then((m) => m.ANSWERED_CALLS_ROUTES),
+  },
+  {
+    path: 'call-search',
+    canActivate: [authGuard, requirePermission('call-center.call-search.index')],
+    resolve: { authz: permissionsResolver },
+    loadChildren: () =>
+      import('./features/call-search/call-search.routes').then((m) => m.CALL_SEARCH_ROUTES),
+  },
+  {
+    path: 'distribution',
+    canActivate: [authGuard, requirePermission('call-center.distribution.index')],
+    resolve: { authz: permissionsResolver },
+    loadChildren: () =>
+      import('./features/distribution/distribution.routes').then((m) => m.DISTRIBUTION_ROUTES),
+  },
+  {
+    path: 'agent-performance',
+    canActivate: [authGuard, requirePermission('call-center.agent-performance.index')],
+    resolve: { authz: permissionsResolver },
+    loadChildren: () =>
+      import('./features/agent-performance/agent-performance.routes').then(
+        (m) => m.AGENT_PERFORMANCE_ROUTES,
+      ),
+  },
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   {
     // An unknown URL is a 404, not a silent bounce to the dashboard: the

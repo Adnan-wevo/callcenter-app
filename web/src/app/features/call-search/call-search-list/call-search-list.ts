@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 
 import { ApiMeta } from '../../../core/api/api.types';
 import { IconComponent } from '../../../shared/components/icon/icon';
@@ -13,7 +14,7 @@ import {
 @Component({
   selector: 'app-call-search-list',
   standalone: true,
-  imports: [PageHeaderComponent, IconComponent],
+  imports: [FormsModule, PageHeaderComponent, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './call-search-list.html',
 })

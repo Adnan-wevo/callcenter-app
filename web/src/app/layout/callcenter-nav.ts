@@ -38,13 +38,6 @@ export const CALLCENTER_BRAND: NavBrand = {
   home: '/dashboard',
 };
 
-/**
- * Entries whose screens are not built yet are ABSENT rather than present and
- * dead: a nav item that leads nowhere is worse than a missing one. The rest
- * of the catalogue (Answered Calls, Call Search, Agent Performance,
- * Distribution) joins this list as each screen lands — see
- * docs/ui-design-spec.md §10 for the order.
- */
 const groups: CallCenterGroup[] = [
   {
     label: 'Reports',
@@ -56,10 +49,34 @@ const groups: CallCenterGroup[] = [
         permission: 'call-center.dashboard.index',
       },
       {
+        label: 'Answered Calls',
+        route: '/answered-calls',
+        icon: 'phone-call',
+        permission: 'call-center.answered-calls.index',
+      },
+      {
         label: 'Unanswered Calls',
         route: '/unanswered-calls',
         icon: 'phone-missed',
         permission: 'call-center.unanswered-calls.index',
+      },
+      {
+        label: 'Call Search',
+        route: '/call-search',
+        icon: 'search',
+        permission: 'call-center.call-search.index',
+      },
+      {
+        label: 'Distribution',
+        route: '/distribution',
+        icon: 'panel',
+        permission: 'call-center.distribution.index',
+      },
+      {
+        label: 'Agent Performance',
+        route: '/agent-performance',
+        icon: 'user',
+        permission: 'call-center.agent-performance.index',
       },
     ],
   },
