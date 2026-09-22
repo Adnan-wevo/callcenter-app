@@ -1,9 +1,27 @@
-import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
+import {
+  HttpClient,
+  HttpContext,
+  HttpContextToken,
+  HttpErrorResponse,
+  HttpParams,
+} from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, map, throwError } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import { ApiEnvelope, ApiErrorEnvelope, ApiValidationError, Page } from './api.types';
+
+/**
+ * Set via `{ silent: true }` on `get`/`list` when the CALLER already
+ * degrades gracefully on failure (softphone bootstrap 404ing for an
+ * extension-less account, an optional lookup that falls back to a raw
+ * value) and the global error dialog would only sit on screen for an
+ * outcome the page already handled. error.interceptor.ts reads this to
+ * skip `notify.error(...)` for this one request; 401 logout and 403
+ * authority resync still run regardless, since those are about auth STATE,
+ * not display.
+ */
+export const SILENT_ERROR = new HttpContextToken<boolean>(() => false);
 
 /**
  * The one place this app talks to the backend.
@@ -22,11 +40,17 @@ export class ApiService {
   private readonly base = `${environment.apiUrl}/api/v1`;
 
   /** GET a single resource and unwrap it. */
-  get<T>(path: string, params?: Record<string, unknown>): Observable<T> {
-    return this.http.get<ApiEnvelope<T>>(this.url(path), { params: toParams(params) }).pipe(
-      map((envelope) => envelope.data),
-      catchError(translate),
-    );
+  get<T>(
+    path: string,
+    params?: Record<string, unknown>,
+    opts?: { silent?: boolean },
+  ): Observable<T> {
+    return this.http
+      .get<ApiEnvelope<T>>(this.url(path), { params: toParams(params), context: contextFor(opts) })
+      .pipe(
+        map((envelope) => envelope.data),
+        catchError(translate),
+      );
   }
 
   /** GET a collection and return both the rows and the pagination counters. */
@@ -71,6 +95,10 @@ export function translate(err: unknown): Observable<never> {
     }
   }
   return throwError(() => err);
+}
+
+function contextFor(opts?: { silent?: boolean }): HttpContext | undefined {
+  return opts?.silent ? new HttpContext().set(SILENT_ERROR, true) : undefined;
 }
 
 /**

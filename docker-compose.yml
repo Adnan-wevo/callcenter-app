@@ -85,6 +85,21 @@ services:
       LARAVEL_CALLBACK_PATH: /api/internal/call-center/callback-attempts
       LARAVEL_CALLBACK_API_KEY: local-dev-key
       LARAVEL_CALLBACK_SECRET: local-dev-secret
+
+      # Softphone. There is no PBX in this local stack, so these coordinates
+      # are unreachable — fine, because the Angular dev environment defaults
+      # to FakeSipEngine (no network at all). They exist so GET
+      # secure/softphone/bootstrap has something real to return: an agent
+      # signing in locally sees "Registered as 1001" in the panel, matching
+      # what a real deployment would show, even though the fake engine never
+      # actually dials out. Point SOFTPHONE_PBX_HOST at a real PBX and flip
+      # environment.sipEngine to 'jssip' to test against one.
+      SOFTPHONE_PBX_HOST: pbx.example.invalid
+      SOFTPHONE_PBX_WS_PORT: "8089"
+      SOFTPHONE_PBX_WS_PATH: /ws
+      SOFTPHONE_PBX_TRANSPORT: wss
+      DEV_SIP_EXTENSION: "1001"
+      DEV_SIP_PASSWORD: local-dev-sip-password
     ports:
       - "8080:8080"
     depends_on:

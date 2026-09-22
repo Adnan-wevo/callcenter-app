@@ -13,21 +13,24 @@ import { filter, map, startWith } from 'rxjs';
 
 import { AuthService } from './core/auth/auth.service';
 import { PermissionStore } from './core/authz/permission.store';
+import { SoftphoneService } from './core/softphone/softphone.service';
 import { CALLCENTER_BRAND, CALLCENTER_NAV } from './layout/callcenter-nav';
 import { SidebarComponent } from './layout/callcenter-sidebar';
+import { SoftphonePanelComponent } from './layout/softphone-panel';
 import { IconComponent } from './shared/components/icon/icon';
 import { NotificationService } from './shared/services/notification.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, SidebarComponent, IconComponent],
+  imports: [RouterOutlet, SidebarComponent, SoftphonePanelComponent, IconComponent],
   templateUrl: './app.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App {
   private readonly auth = inject(AuthService);
   private readonly perms = inject(PermissionStore);
+  protected readonly phone = inject(SoftphoneService);
   private readonly router = inject(Router);
   protected readonly notify = inject(NotificationService);
 
@@ -110,6 +113,16 @@ export class App {
         this.perms.ensureLoaded().subscribe();
       }
     });
+
+    // Same reasoning as the permission bootstrap above, and independent of
+    // it: an agent with no report permissions at all may still hold a phone.
+    // connect() is itself a no-op once already connecting/connected, so this
+    // firing again on an unrelated signal change costs nothing.
+    effect(() => {
+      if (this.isAuthenticated()) {
+        this.phone.connect();
+      }
+    });
   }
 
   protected retryPermissions(): void {
@@ -117,6 +130,7 @@ export class App {
   }
 
   protected signOut(): void {
+    this.phone.disconnect();
     this.auth.logout();
     void this.router.navigate(['/login']);
   }

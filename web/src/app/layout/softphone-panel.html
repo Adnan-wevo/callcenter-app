@@ -1,0 +1,286 @@
+@if (!open()) {
+  <!-- Collapsed rail: a single button to reopen, plus a status dot so an
+       agent can tell at a glance whether the phone is registered without
+       opening the panel — matching heal-crm's collapsed-softphone affordance. -->
+  <div class="bg-card flex w-14 shrink-0 flex-col items-center gap-3 border-r py-3">
+    <button
+      type="button"
+      class="hover:bg-accent relative flex size-9 items-center justify-center rounded-lg transition-colors"
+      title="Open softphone"
+      (click)="toggleOpen()"
+    >
+      <app-icon name="phone-call" [size]="18" />
+      <span
+        class="absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2"
+        [class]="
+          phone.isConnected()
+            ? 'bg-emerald-500 ring-card'
+            : phone.connectState() === 'error' || phone.connectState() === 'failed'
+              ? 'bg-destructive ring-card'
+              : 'bg-zinc-300 ring-card dark:bg-zinc-600'
+        "
+      ></span>
+    </button>
+
+    @if (primaryCall(); as call) {
+      <div
+        class="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600"
+        [title]="label(call)"
+      >
+        <app-icon name="phone-call" [size]="16" />
+      </div>
+    }
+  </div>
+} @else {
+  <aside class="bg-card flex w-[320px] shrink-0 flex-col overflow-hidden border-r">
+    <!-- Header, h-14 to match the breadcrumb bar it sits beside. -->
+    <div class="flex h-14 shrink-0 items-center justify-between border-b px-4">
+      <div class="flex items-center gap-2">
+        <app-icon name="phone-call" [size]="16" class="text-brand" />
+        <span class="text-xs font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+          Softphone
+        </span>
+      </div>
+      <button
+        type="button"
+        class="hover:bg-accent rounded p-1 text-zinc-400 transition-colors hover:text-zinc-600 dark:hover:text-zinc-300"
+        title="Close softphone"
+        (click)="toggleOpen()"
+      >
+        <app-icon name="x" [size]="16" />
+      </button>
+    </div>
+
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+      @switch (phone.connectState()) {
+        @case ('idle') {
+          <div class="flex flex-1 items-center justify-center py-10">
+            <div
+              class="border-muted-foreground/30 border-t-foreground size-6 animate-spin rounded-full border-2"
+            ></div>
+          </div>
+        }
+        @case ('connecting') {
+          <div class="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center">
+            <div
+              class="border-muted-foreground/30 border-t-brand size-6 animate-spin rounded-full border-2"
+            ></div>
+            <p class="text-muted-foreground text-sm">Connecting…</p>
+          </div>
+        }
+        @case ('registering') {
+          <div class="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center">
+            <div
+              class="border-muted-foreground/30 border-t-brand size-6 animate-spin rounded-full border-2"
+            ></div>
+            <p class="text-muted-foreground text-sm">Registering…</p>
+          </div>
+        }
+        @case ('no-extension') {
+          <div class="flex flex-1 flex-col items-center justify-center gap-2 px-2 py-10 text-center">
+            <div class="text-muted-foreground flex size-10 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800">
+              <app-icon name="phone-missed" [size]="18" />
+            </div>
+            <p class="text-muted-foreground text-sm">No phone is assigned to your account.</p>
+          </div>
+        }
+        @case ('failed') {
+          <div class="flex flex-1 flex-col items-center justify-center gap-3 px-2 py-10 text-center">
+            <div class="bg-destructive/10 text-destructive flex size-10 items-center justify-center rounded-full">
+              <app-icon name="alert" [size]="18" />
+            </div>
+            <p class="text-muted-foreground text-sm">
+              {{ phone.connectError() || 'Could not register the softphone.' }}
+            </p>
+            <button type="button" class="btn btn-outline btn-sm" (click)="retry()">
+              <app-icon name="refresh-cw" [size]="14" />
+              Retry
+            </button>
+          </div>
+        }
+        @case ('error') {
+          <div class="flex flex-1 flex-col items-center justify-center gap-3 px-2 py-10 text-center">
+            <div class="bg-destructive/10 text-destructive flex size-10 items-center justify-center rounded-full">
+              <app-icon name="alert" [size]="18" />
+            </div>
+            <p class="text-muted-foreground text-sm">
+              {{ phone.connectError() || 'Could not load your softphone settings.' }}
+            </p>
+            <button type="button" class="btn btn-outline btn-sm" (click)="retry()">
+              <app-icon name="refresh-cw" [size]="14" />
+              Retry
+            </button>
+          </div>
+        }
+        @default {
+          <!-- registered / unregistered: the working states. -->
+
+          @if (phone.bootstrap(); as b) {
+            <div class="mb-3 flex items-center gap-2 rounded-lg border px-3 py-2">
+              <span
+                class="size-2 shrink-0 rounded-full"
+                [class]="phone.isConnected() ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-600'"
+              ></span>
+              <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ b.display_name }}</span>
+              <span class="text-muted-foreground shrink-0 font-mono text-xs">{{ b.extension }}</span>
+            </div>
+          }
+
+          @if (phone.incomingCall(); as ringing) {
+            <!-- Ringing card: the one state that pre-empts everything else in
+                 the panel, so an incoming call is never missed behind a
+                 half-dialled number. -->
+            <div class="card mb-3 flex flex-col items-center gap-3 p-5 text-center">
+              <div class="relative flex size-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500/40"></span>
+                <app-icon name="phone-call" [size]="24" class="relative" />
+              </div>
+              <div>
+                <p class="font-semibold">{{ label(ringing) }}</p>
+                <p class="text-muted-foreground text-xs">Incoming call…</p>
+              </div>
+              <div class="flex w-full gap-2">
+                <button type="button" class="btn btn-outline flex-1" (click)="decline(ringing)">
+                  <app-icon name="phone-off" [size]="16" />
+                  Decline
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 gap-2 !bg-emerald-600 hover:!bg-emerald-700 btn btn-default"
+                  (click)="answer(ringing)"
+                >
+                  <app-icon name="phone-call" [size]="16" />
+                  Answer
+                </button>
+              </div>
+            </div>
+          }
+
+          @if (primaryCall(); as call) {
+            <!-- The active call card. -->
+            <div class="card mb-3 flex flex-col items-center gap-2 p-4 text-center">
+              <div class="bg-brand/10 text-brand flex size-11 items-center justify-center rounded-full">
+                <app-icon name="user" [size]="20" />
+              </div>
+              <div>
+                <p class="font-semibold">{{ label(call) }}</p>
+                <p class="text-muted-foreground text-xs">
+                  @if (call.state === 'progress') {
+                    Calling…
+                  } @else if (call.state === 'held') {
+                    On hold
+                  } @else if (elapsed(); as e) {
+                    {{ e }}
+                  } @else {
+                    Connecting…
+                  }
+                </p>
+              </div>
+
+              <div class="mt-1 flex w-full gap-2">
+                <button
+                  type="button"
+                  class="btn btn-outline flex-1"
+                  [class]="call.muted ? '!bg-accent' : ''"
+                  [attr.aria-pressed]="call.muted"
+                  title="Mute"
+                  (click)="toggleMute(call)"
+                >
+                  <app-icon [name]="call.muted ? 'mic-off' : 'mic'" [size]="16" />
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-outline flex-1"
+                  [class]="call.onHold ? '!bg-accent' : ''"
+                  [attr.aria-pressed]="call.onHold"
+                  title="Hold"
+                  (click)="toggleHold(call)"
+                >
+                  <app-icon [name]="call.onHold ? 'play' : 'pause'" [size]="16" />
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-outline flex-1"
+                  [class]="showKeypadDuringCall() ? '!bg-accent' : ''"
+                  title="Keypad"
+                  (click)="showKeypadDuringCall.set(!showKeypadDuringCall())"
+                >
+                  <app-icon name="grid" [size]="16" />
+                </button>
+                <button
+                  type="button"
+                  class="btn flex-1 gap-0 !bg-destructive text-white hover:opacity-90"
+                  title="Hang up"
+                  (click)="hangup(call)"
+                >
+                  <app-icon name="phone-off" [size]="16" />
+                </button>
+              </div>
+            </div>
+          }
+
+          @if (!primaryCall() || showKeypadDuringCall()) {
+            <!-- The dialpad. Doubles as a DTMF pad mid-call when the caller
+                 opened the keypad above — pressDigit() branches on that. -->
+            @if (!primaryCall()) {
+              <div class="relative mb-3">
+                <input
+                  type="text"
+                  class="input w-full pr-9 text-center font-mono text-lg tracking-wide"
+                  placeholder="Enter a number"
+                  aria-label="Number to dial"
+                  [value]="dialInput()"
+                  (input)="dialInput.set($any($event.target).value)"
+                  (keydown.enter)="callDialInput()"
+                />
+                @if (dialInput()) {
+                  <button
+                    type="button"
+                    class="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 rounded p-1"
+                    title="Backspace"
+                    (click)="backspace()"
+                  >
+                    <app-icon name="delete" [size]="16" />
+                  </button>
+                }
+              </div>
+            }
+
+            <div class="grid grid-cols-3 gap-2">
+              @for (key of dialpadKeys; track key[0]) {
+                <button
+                  type="button"
+                  class="hover:bg-accent flex flex-col items-center justify-center rounded-lg border py-2.5 transition-colors"
+                  (click)="pressDigit(key[0])"
+                >
+                  <span class="text-lg font-medium">{{ key[0] }}</span>
+                  @if (key[1]) {
+                    <span class="text-muted-foreground text-[0.6rem] tracking-widest">{{ key[1] }}</span>
+                  }
+                </button>
+              }
+            </div>
+
+            @if (!primaryCall()) {
+              <button
+                type="button"
+                class="btn btn-default mt-3 w-full gap-2"
+                [disabled]="!dialInput()"
+                (click)="callDialInput()"
+              >
+                <app-icon name="phone-call" [size]="16" />
+                Call
+              </button>
+            }
+          }
+        }
+      }
+    </div>
+  </aside>
+}
+
+<!-- Remote audio. Not visible — srcObject is set imperatively in the
+     component (see its constructor), because that property cannot be bound
+     declaratively. autoplay is required for the browser to actually play a
+     stream attached after the element already exists. -->
+<audio #remoteAudio autoplay class="hidden"></audio>

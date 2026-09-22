@@ -3,6 +3,7 @@ import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 
+import { SILENT_ERROR } from '../api/api.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { AuthService } from '../auth/auth.service';
 import { PermissionStore } from '../authz/permission.store';
@@ -20,7 +21,12 @@ import { PermissionStore } from '../authz/permission.store';
  *   rejected, ApiService turns it into an ApiValidationError, and the form
  *   renders it next to the inputs. A global dialog would only obscure them.
  * - **everything else** — surface the envelope's `message` in the one
- *   notification slot.
+ *   notification slot, unless the request carries `SILENT_ERROR` (set via
+ *   `{ silent: true }` on `ApiService.get`), in which case the caller already
+ *   renders its own "nothing here" state and a global dialog on top would be
+ *   telling the user something they were already shown. 401 logout and 403
+ *   resync above still run regardless — those are about auth STATE, not
+ *   about what appears on screen.
  */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
@@ -48,6 +54,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         return throwError(() => err);
       }
 
+      const silent = req.context.get(SILENT_ERROR);
+
       const envelope = err.error as { message?: string } | string | null;
       let message: string;
       if (envelope && typeof envelope === 'object' && typeof envelope.message === 'string') {
@@ -62,7 +70,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
       // The login page renders its own inline error, so skip the global
       // dialog there to avoid saying the same thing twice.
-      if (!req.url.includes('/open/auth/login')) {
+      if (!silent && !req.url.includes('/open/auth/login')) {
         notify.error(message);
       }
 
