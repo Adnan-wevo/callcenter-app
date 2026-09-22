@@ -49,6 +49,15 @@ const (
 	PermCallSearchExport   = "call-center.call-search.export"
 	PermAgentPerformance   = "call-center.agent-performance.index"
 	PermDistribution       = "call-center.distribution.index"
+
+	// PermSoftphoneSupervise gates redirect/pickup/spy — the same name and
+	// the same boundary as heal-crm's own
+	// `Route::middleware('can:softphone.supervise')` in
+	// Modules/SoftPhone/routes/api.php. Queue login/logout/pause are NOT
+	// behind this permission there either — any agent controls their own
+	// queue membership, only supervisor actions over OTHER agents' calls
+	// are gated.
+	PermSoftphoneSupervise = "softphone.supervise"
 )
 
 // AllPermissions is the catalogue, in the order a UI would list it.
@@ -63,6 +72,7 @@ var AllPermissions = []string{
 	PermCallSearchExport,
 	PermAgentPerformance,
 	PermDistribution,
+	PermSoftphoneSupervise,
 }
 
 var (

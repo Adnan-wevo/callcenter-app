@@ -40,9 +40,9 @@ var (
 
 // Claims is the whole payload. Identity and lifetime, nothing else.
 type Claims struct {
-	UserID string `json:"user_id"`
-	IssuedAt int64 `json:"iat"`
-	ExpiresAt int64 `json:"exp"`
+	UserID    string `json:"user_id"`
+	IssuedAt  int64  `json:"iat"`
+	ExpiresAt int64  `json:"exp"`
 }
 
 type header struct {

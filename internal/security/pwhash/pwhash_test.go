@@ -59,10 +59,10 @@ func TestVerifyRejectsMalformedHash(t *testing.T) {
 		"",
 		"notahash",
 		"bcrypt$10$abc$def",
-		"pbkdf2-sha256$abc$c2FsdA$a2V5",  // non-numeric iterations
-		"pbkdf2-sha256$0$c2FsdA$a2V5",    // zero iterations
-		"pbkdf2-sha256$1000$!!!$a2V5",    // bad salt base64
-		"pbkdf2-sha256$1000$c2FsdA",      // too few fields
+		"pbkdf2-sha256$abc$c2FsdA$a2V5", // non-numeric iterations
+		"pbkdf2-sha256$0$c2FsdA$a2V5",   // zero iterations
+		"pbkdf2-sha256$1000$!!!$a2V5",   // bad salt base64
+		"pbkdf2-sha256$1000$c2FsdA",     // too few fields
 	} {
 		if err := Verify(bad, "x"); err != ErrInvalidHash {
 			t.Errorf("Verify(%q): err = %v, want ErrInvalidHash", bad, err)

@@ -8,9 +8,11 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"callcenter-service/internal/auth"
+	"callcenter-service/internal/calllog"
 	"callcenter-service/internal/config"
 	"callcenter-service/internal/db/qstats"
 	"callcenter-service/internal/gateway/laravel"
+	"callcenter-service/internal/gateway/pbxcontrol"
 	"callcenter-service/internal/gateway/pbxworker"
 	"callcenter-service/internal/handlers"
 	"callcenter-service/internal/security/hmacsig"
@@ -31,17 +33,36 @@ func main() {
 		log.Fatal("DEV_ADMIN_PASSWORD and DEV_AGENT_PASSWORD must be set to seed the local user store")
 	}
 
-	db, err := connectWithRetry(cfg.QstatsDSN, 30, 2*time.Second)
+	db, err := connectWithRetry(30, 2*time.Second, func() (*sqlx.DB, error) { return qstats.Connect(cfg.QstatsDSN) })
 	if err != nil {
 		log.Fatalf("qstats connect: %v", err)
 	}
 	defer db.Close()
 	qstatsRepo := qstats.NewRepository(db)
 
+	// This product's own operational database (call_logs). See
+	// internal/calllog's own doc comment for why this is separate from
+	// qstats above.
+	ccDB, err := connectWithRetry(30, 2*time.Second, func() (*sqlx.DB, error) { return calllog.Connect(cfg.CallCenterDSN) })
+	if err != nil {
+		log.Fatalf("callcenter db connect: %v", err)
+	}
+	defer ccDB.Close()
+	callLogRepo := calllog.NewRepository(ccDB)
+
 	pbxClient, err := pbxworker.New(cfg)
 	if err != nil {
 		log.Fatalf("pbxworker client: %v", err)
 	}
+
+	// pbx-worker's LIVE control surface (snapshots + AMI commands) —
+	// distinct from pbxClient above, which is the HISTORICAL reporting
+	// client. See internal/gateway/pbxcontrol's own doc comment.
+	pbxControlClient := pbxcontrol.NewClient(
+		&http.Client{Timeout: 15 * time.Second},
+		cfg.PBXControlBaseURL,
+		hmacsig.Credentials{APIKey: cfg.PBXControlAPIKey, Secret: cfg.PBXControlSecret},
+	)
 
 	callbackClient := laravel.NewHMACCallbackClient(
 		&http.Client{Timeout: 15 * time.Second},
@@ -96,7 +117,7 @@ func main() {
 		},
 	)
 
-	h := handlers.New(qstatsRepo, pbxClient, callbackClient, authSvc, softphoneSvc)
+	h := handlers.New(qstatsRepo, pbxClient, callbackClient, authSvc, softphoneSvc, callLogRepo, pbxControlClient)
 	router := handlers.NewRouter(h, authSvc, cfg.CORSOrigins)
 
 	addr := ":" + cfg.HTTPPort
@@ -107,7 +128,7 @@ func main() {
 	}
 }
 
-// connectWithRetry waits for the database to accept connections instead of
+// connectWithRetry waits for a database to accept connections instead of
 // dying on the first refusal.
 //
 // A compose healthcheck is not enough on its own: MySQL's usual `mysqladmin
@@ -115,15 +136,17 @@ func main() {
 // still coming up, so a dependent service can be released to start and still
 // be refused. Retrying here is also the behaviour wanted in a real
 // deployment, where a database can be restarted underneath a running estate.
-func connectWithRetry(dsn string, attempts int, wait time.Duration) (*sqlx.DB, error) {
+// connect is qstats.Connect or calllog.Connect, called until it succeeds or
+// attempts runs out.
+func connectWithRetry(attempts int, wait time.Duration, connect func() (*sqlx.DB, error)) (*sqlx.DB, error) {
 	var lastErr error
 	for i := 1; i <= attempts; i++ {
-		db, err := qstats.Connect(dsn)
+		db, err := connect()
 		if err == nil {
 			return db, nil
 		}
 		lastErr = err
-		log.Printf("qstats not ready (attempt %d/%d): %v", i, attempts, err)
+		log.Printf("database not ready (attempt %d/%d): %v", i, attempts, err)
 		time.Sleep(wait)
 	}
 	return nil, lastErr

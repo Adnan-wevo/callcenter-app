@@ -132,21 +132,41 @@ func NewService(store *Store, pbx PBX, supervisor SupervisorCodes) *Service {
 	return &Service{store: store, pbx: pbx, supervisor: supervisor}
 }
 
-// BootstrapFor assembles the payload for one user.
-func (s *Service) BootstrapFor(userID string) (*Bootstrap, error) {
+// primaryExtension picks the default extension, falling back to the first
+// row: an agent with extensions but none marked default should still get a
+// phone rather than an error. Shared by BootstrapFor and ExtensionFor so
+// both agree on which extension is "the" one for a user with several.
+func (s *Service) primaryExtension(userID string) (Extension, []Extension, bool) {
 	extensions, ok := s.store.ForUser(userID)
 	if !ok {
-		return nil, ErrNoExtension
+		return Extension{}, nil, false
 	}
-
-	// Default first, falling back to the first row: an agent with extensions
-	// but none marked default should still get a phone rather than an error.
 	primary := extensions[0]
 	for _, e := range extensions {
 		if e.IsDefault {
 			primary = e
 			break
 		}
+	}
+	return primary, extensions, true
+}
+
+// ExtensionFor returns just the extension NUMBER (never the password) for
+// a user's primary SIP account, for callers that need to stamp a call log
+// row with "who handled this" without needing the full bootstrap payload.
+func (s *Service) ExtensionFor(userID string) (string, bool) {
+	primary, _, ok := s.primaryExtension(userID)
+	if !ok {
+		return "", false
+	}
+	return primary.Extension, true
+}
+
+// BootstrapFor assembles the payload for one user.
+func (s *Service) BootstrapFor(userID string) (*Bootstrap, error) {
+	primary, extensions, ok := s.primaryExtension(userID)
+	if !ok {
+		return nil, ErrNoExtension
 	}
 
 	// The listed extensions carry no passwords — only the one being

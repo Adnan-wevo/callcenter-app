@@ -11,7 +11,15 @@ services:
     ports:
       - "3307:3306" # host 3307 -> avoid clashing with any local mysql on 3306
     volumes:
-      - ./migrations/qstats:/docker-entrypoint-initdb.d:ro
+      # Mounted as individual files (not whole directories) so two separate
+      # migration folders — qstats (externally-owned PBX schema) and
+      # callcenter (this product's own DB, created by its own script via
+      # CREATE DATABASE, see migrations/callcenter/001_init.sql) — can both
+      # land in the one docker-entrypoint-initdb.d the mysql image scans.
+      # Numeric prefixes control run order; only ordering within CALLCENTER's
+      # own numbering matters since qstats' init creates a different DB.
+      - ./migrations/qstats/001_init.sql:/docker-entrypoint-initdb.d/01_qstats_init.sql:ro
+      - ./migrations/callcenter/001_init.sql:/docker-entrypoint-initdb.d/02_callcenter_init.sql:ro
       - qstats-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
@@ -76,10 +84,29 @@ services:
 
       QSTATS_DSN: "qstats:qstatspass@tcp(mysql:3306)/qstats?parseTime=true"
 
+      # This product's own DB (call_logs). Uses the SAME mysql container as
+      # qstats above for local dev only — see migrations/callcenter's own
+      # doc comment. root/rootpass because 002_callcenter_init.sql created
+      # this database itself; the qstats user/password only has grants on
+      # the qstats database.
+      CALLCENTER_DSN: "root:rootpass@tcp(mysql:3306)/callcenter?parseTime=true"
+
       PBX_WORKER_MODE: hmac
       PBX_WORKER_BASE_URL: "http://mock-pbx-worker:8081"
       PBX_WORKER_API_KEY: local-dev-key
       PBX_WORKER_SECRET: local-dev-secret
+
+      # pbx-worker's LIVE control surface (queue/agent snapshots + AMI
+      # commands). Defaults to the SAME mock-pbx-worker host/credentials as
+      # PBX_WORKER_* above when unset (see config.go) — mock-pbx-worker does
+      # not implement /api/index.php or /api/commands.php yet, so these are
+      # set explicitly here as a placeholder pointing at the same mock host;
+      # calls to the live-snapshot/command endpoints will 404 against the
+      # mock until it's extended. Point PBX_CONTROL_BASE_URL at a real
+      # pbx-worker to exercise this for real.
+      PBX_CONTROL_BASE_URL: "http://mock-pbx-worker:8081"
+      PBX_CONTROL_API_KEY: local-dev-key
+      PBX_CONTROL_SECRET: local-dev-secret
 
       LARAVEL_CALLBACK_BASE_URL: "http://mock-laravel:8082"
       LARAVEL_CALLBACK_PATH: /api/internal/call-center/callback-attempts

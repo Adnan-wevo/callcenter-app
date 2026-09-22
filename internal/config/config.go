@@ -16,7 +16,7 @@ type PBXWorkerMode string
 
 const (
 	PBXWorkerModeHMAC PBXWorkerMode = "hmac" // v2 PHP worker, HMAC-signed
-	PBXWorkerModeJWT   PBXWorkerMode = "jwt"  // v3 Go worker, JWT-authenticated (TODO, not wired yet)
+	PBXWorkerModeJWT  PBXWorkerMode = "jwt"  // v3 Go worker, JWT-authenticated (TODO, not wired yet)
 )
 
 type Config struct {
@@ -27,15 +27,15 @@ type Config struct {
 	// ASSUMPTION: reusing the same HMAC pattern as Laravel<->pbx-worker for
 	// consistency. Confirm with the user/reference code whether this should
 	// instead be JWT or a plain shared secret — see README "Open questions".
-	IncomingAuthDisabled bool // convenience switch for local dev/testing only; must be false in any real deployment
+	IncomingAuthDisabled  bool // convenience switch for local dev/testing only; must be false in any real deployment
 	IncomingAPIKey        string
-	IncomingSecret         string
+	IncomingSecret        string
 	IncomingHMACTolerance time.Duration
 
 	// End-user authentication (browser -> this service). Separate from the
 	// HMAC above, which is service-to-service only; see internal/auth.
-	JWTSecret     string
-	JWTTTL        time.Duration
+	JWTSecret        string
+	JWTTTL           time.Duration
 	DevAdminPassword string
 	DevAgentPassword string
 
@@ -59,12 +59,27 @@ type Config struct {
 	// qstats direct-read database.
 	QstatsDSN string
 
+	// This product's own operational database (call_logs, and eventually
+	// sip_extensions) — separate from qstats. See internal/calllog.
+	CallCenterDSN string
+
 	// pbx-worker HTTP gateway.
-	PBXWorkerMode    PBXWorkerMode
-	PBXWorkerBaseURL string
-	PBXWorkerAPIKey  string
-	PBXWorkerSecret  string
+	PBXWorkerMode     PBXWorkerMode
+	PBXWorkerBaseURL  string
+	PBXWorkerAPIKey   string
+	PBXWorkerSecret   string
 	PBXWorkerJWTToken string // TODO: v3 auth flow unconfirmed; placeholder only
+
+	// pbx-worker's LIVE control surface (snapshots + AMI commands). Same
+	// host and credentials as PBXWorker* above — confirmed real: both
+	// PbxReportGateway.php and PbxWorkerGateway.php resolve the same
+	// PBX_WORKER_URL/PBX_WORKER_API_KEY/PBX_WORKER_SECRET env vars in
+	// heal-crm. Kept as separate config fields (not just reused directly)
+	// so a deployment CAN point them at a different host later without
+	// this being a surprise.
+	PBXControlBaseURL string
+	PBXControlAPIKey  string
+	PBXControlSecret  string
 
 	// Outbound webhook back to Laravel (ad-hoc callback attempts).
 	LaravelCallbackBaseURL string
@@ -104,13 +119,21 @@ func Load() Config {
 		DevSIPExtension: getenv("DEV_SIP_EXTENSION", ""),
 		DevSIPPassword:  getenv("DEV_SIP_PASSWORD", ""),
 
-		QstatsDSN: getenv("QSTATS_DSN", ""),
+		QstatsDSN:     getenv("QSTATS_DSN", ""),
+		CallCenterDSN: getenv("CALLCENTER_DSN", ""),
 
 		PBXWorkerMode:     PBXWorkerMode(getenv("PBX_WORKER_MODE", string(PBXWorkerModeHMAC))),
 		PBXWorkerBaseURL:  getenv("PBX_WORKER_BASE_URL", ""),
 		PBXWorkerAPIKey:   getenv("PBX_WORKER_API_KEY", ""),
 		PBXWorkerSecret:   getenv("PBX_WORKER_SECRET", ""),
 		PBXWorkerJWTToken: getenv("PBX_WORKER_JWT_TOKEN", ""),
+
+		// Defaults to the same PBX_WORKER_* values when the _CONTROL_
+		// variants are not set, matching the real deployment's one shared
+		// credential set. Override only if a deployment ever splits them.
+		PBXControlBaseURL: getenv("PBX_CONTROL_BASE_URL", getenv("PBX_WORKER_BASE_URL", "")),
+		PBXControlAPIKey:  getenv("PBX_CONTROL_API_KEY", getenv("PBX_WORKER_API_KEY", "")),
+		PBXControlSecret:  getenv("PBX_CONTROL_SECRET", getenv("PBX_WORKER_SECRET", "")),
 
 		LaravelCallbackBaseURL: getenv("LARAVEL_CALLBACK_BASE_URL", ""),
 		// TODO: confirm real path against Laravel reference code.

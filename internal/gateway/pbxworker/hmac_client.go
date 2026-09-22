@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"callcenter-service/internal/security/hmacsig"
 )
@@ -21,11 +22,36 @@ import (
 type HMACClient struct {
 	http    *http.Client
 	baseURL string
-	creds   hmacsig.Credentials
+	// basePath is the path component of baseURL, e.g. "/wevetel-pbx-worker"
+	// when baseURL is "https://sbc.wevetel.com/wevetel-pbx-worker". It must
+	// be prepended to every signed URI (see (c *HMACClient) get) — confirmed
+	// live against the real staging worker, which signs against
+	// $_SERVER['REQUEST_URI'] (PbxWorkerGateway.php's own basePath + uri).
+	// Signing only "/api/reports.php?..." works against a bare-root
+	// deployment (mock-pbx-worker has no path prefix, which is why this went
+	// unnoticed locally) and fails signature verification the moment
+	// PBX_WORKER_BASE_URL carries a path, which the real deployment's does.
+	basePath string
+	creds    hmacsig.Credentials
 }
 
 func NewHMACClient(httpClient *http.Client, baseURL string, creds hmacsig.Credentials) *HMACClient {
-	return &HMACClient{http: httpClient, baseURL: baseURL, creds: creds}
+	return &HMACClient{
+		http:     httpClient,
+		baseURL:  baseURL,
+		basePath: basePathOf(baseURL),
+		creds:    creds,
+	}
+}
+
+// basePathOf mirrors PbxWorkerGateway.php's
+// rtrim(parse_url($this->baseUrl, PHP_URL_PATH) ?? ”, '/').
+func basePathOf(baseURL string) string {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimRight(u.Path, "/")
 }
 
 var _ ReportsClient = (*HMACClient)(nil)
@@ -156,7 +182,9 @@ func (c *HMACClient) get(ctx context.Context, action string, extra url.Values, o
 		return fmt.Errorf("pbxworker: build request for action %s: %w", action, err)
 	}
 
-	headers := hmacsig.Sign(c.creds, http.MethodGet, reqURI, nil)
+	// Signed URI includes basePath: it must match the full REQUEST_URI the
+	// PHP worker sees, not just the path after baseURL.
+	headers := hmacsig.Sign(c.creds, http.MethodGet, c.basePath+reqURI, nil)
 	applySigningHeaders(req, headers)
 
 	resp, err := c.http.Do(req)

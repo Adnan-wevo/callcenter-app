@@ -56,6 +56,41 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 		// separate "may use the phone" permission in the catalogue.
 		secure.GET("/softphone/bootstrap", h.SoftphoneBootstrap)
 
+		sp := secure.Group("/softphone")
+		{
+			// The call-log write-path (Softphone::createCallLog and
+			// friends). Gated by authentication alone, matching the PHP
+			// original: any signed-in agent may record their own calls,
+			// there is no separate permission for it there either.
+			sp.POST("/call-logs", h.CreateCallLog)
+			sp.POST("/call-logs/:id/answered", h.MarkCallAnswered)
+			sp.POST("/call-logs/:id/finalize", h.FinalizeCallLog)
+			sp.POST("/detect-queue", h.DetectQueue)
+
+			// Live PBX snapshots — reads, authentication only.
+			sp.GET("/queues", h.LiveQueues)
+			sp.GET("/agents", h.LiveAgents)
+			sp.GET("/live-calls", h.LiveCalls)
+
+			// Queue membership: an agent controls their OWN membership only
+			// (see interfaceFor's own doc comment) — no extra permission
+			// beyond authentication, matching QueueMemberController's real
+			// route group in Modules/SoftPhone/routes/api.php.
+			sp.POST("/queue/login", h.QueueLogin)
+			sp.POST("/queue/logout", h.QueueLogout)
+			sp.POST("/queue/pause", h.QueuePause)
+			sp.POST("/queue/unpause", h.QueueUnpause)
+
+			// Supervisor actions over OTHER agents' live calls — gated the
+			// same way heal-crm gates them
+			// (`can:softphone.supervise` in QueueActionController's route
+			// group).
+			supervise := middleware.RequirePermission(auth.PermSoftphoneSupervise)
+			sp.POST("/queue/redirect", supervise, h.QueueRedirect)
+			sp.POST("/queue/pickup", supervise, h.QueuePickup)
+			sp.POST("/queue/spy", supervise, h.QueueSpy)
+		}
+
 		cc := secure.Group("/call-center")
 		{
 			// Lookups feed the filter bar on every report screen, so they are

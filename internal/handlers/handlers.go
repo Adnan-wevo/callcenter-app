@@ -10,8 +10,10 @@ import (
 
 	"callcenter-service/internal/apires"
 	"callcenter-service/internal/auth"
+	"callcenter-service/internal/calllog"
 	"callcenter-service/internal/db/qstats"
 	"callcenter-service/internal/gateway/laravel"
+	"callcenter-service/internal/gateway/pbxcontrol"
 	"callcenter-service/internal/gateway/pbxworker"
 	"callcenter-service/internal/reports"
 	"callcenter-service/internal/softphone"
@@ -23,6 +25,8 @@ type Handlers struct {
 	laravelCallback laravel.CallbackClient
 	auth            *auth.Service
 	softphone       *softphone.Service
+	callLogs        *calllog.Repository
+	pbxControl      *pbxcontrol.Client
 }
 
 func New(
@@ -31,6 +35,8 @@ func New(
 	laravelCallback laravel.CallbackClient,
 	authSvc *auth.Service,
 	softphoneSvc *softphone.Service,
+	callLogs *calllog.Repository,
+	pbxControl *pbxcontrol.Client,
 ) *Handlers {
 	return &Handlers{
 		qstats:          qstatsRepo,
@@ -38,6 +44,8 @@ func New(
 		laravelCallback: laravelCallback,
 		auth:            authSvc,
 		softphone:       softphoneSvc,
+		callLogs:        callLogs,
+		pbxControl:      pbxControl,
 	}
 }
 
