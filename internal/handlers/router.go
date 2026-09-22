@@ -138,6 +138,12 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 			cc.GET("/calls/:id",
 				middleware.RequirePermission(auth.PermCallSearchIndex), h.GetCallDetail)
 
+			cc.GET("/distribution",
+				middleware.RequirePermission(auth.PermDistribution), h.Distribution)
+
+			cc.GET("/agent-performance",
+				middleware.RequirePermission(auth.PermAgentPerformance), h.AgentPerformance)
+
 			// The callback attempt. The acting agent comes from the TOKEN, never
 			// from the request body — see handlers/callback.go.
 			cc.POST("/unanswered-calls/callback",

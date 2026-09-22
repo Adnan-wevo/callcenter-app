@@ -13,48 +13,54 @@ package pbxworker
 import "time"
 
 // AnsweredCall is one row from action=answered-calls.
+//
+// Numeric fields are FlexInt, not int: confirmed live against the real
+// worker that e.g. ring_time comes back as a JSON string on some rows and a
+// JSON number on others (see flexint.go) — a plain int field decodes some
+// rows and hard-fails json.Unmarshal for the WHOLE response on others.
 type AnsweredCall struct {
-	Datetime      string `json:"datetime"`
-	QueueName     string `json:"queue_name"`
-	AgentName     string `json:"agent_name"`
-	Event         string `json:"event"`
-	UniqueID      string `json:"uniqueid"`
-	CallerID      string `json:"caller_id"`
-	URL           string `json:"url"`
-	DID           string `json:"did"`
-	RingTime      int    `json:"ring_time"`
-	RecordingFile string `json:"recording_file"`
-	HoldTime      int    `json:"hold_time"`
-	Duration      int    `json:"duration"`
-	Position      int    `json:"position"`
-	TransferExten string `json:"transfer_exten"`
-	YearMonth     string `json:"year_month"`
-	YearWeek      string `json:"year_week"`
-	Date          string `json:"date"`
-	Hour          int    `json:"hour"`
-	DayOfWeek     int    `json:"day_of_week"`
-	SecondsOfDay  int    `json:"seconds_of_day"`
+	Datetime      string  `json:"datetime"`
+	QueueName     string  `json:"queue_name"`
+	AgentName     string  `json:"agent_name"`
+	Event         string  `json:"event"`
+	UniqueID      string  `json:"uniqueid"`
+	CallerID      string  `json:"caller_id"`
+	URL           string  `json:"url"`
+	DID           string  `json:"did"`
+	RingTime      FlexInt `json:"ring_time"`
+	RecordingFile string  `json:"recording_file"`
+	HoldTime      FlexInt `json:"hold_time"`
+	Duration      FlexInt `json:"duration"`
+	Position      FlexInt `json:"position"`
+	TransferExten string  `json:"transfer_exten"`
+	YearMonth     string  `json:"year_month"`
+	YearWeek      string  `json:"year_week"`
+	Date          string  `json:"date"`
+	Hour          FlexInt `json:"hour"`
+	DayOfWeek     FlexInt `json:"day_of_week"`
+	SecondsOfDay  FlexInt `json:"seconds_of_day"`
 }
 
 // UnansweredCall is one row from action=unanswered-calls. Event is one of
 // the four real CallEvent enum cases for unanswered calls: ABANDON,
-// EXITWITHTIMEOUT, EXITWITHKEY, EXITEMPTY.
+// EXITWITHTIMEOUT, EXITWITHKEY, EXITEMPTY. See AnsweredCall's own doc
+// comment for why the numeric fields are FlexInt.
 type UnansweredCall struct {
-	Datetime  string `json:"datetime"`
-	QueueName string `json:"queue_name"`
-	AgentName string `json:"agent_name"`
-	Event     string `json:"event"`
-	UniqueID  string `json:"uniqueid"`
-	CallerID  string `json:"caller_id"`
-	URL       string `json:"url"`
-	DID       string `json:"did"`
-	RingTime  int    `json:"ring_time"`
-	HoldTime  int    `json:"hold_time"`
-	YearMonth string `json:"year_month"`
-	YearWeek  string `json:"year_week"`
-	Date      string `json:"date"`
-	Hour      int    `json:"hour"`
-	DayOfWeek int    `json:"day_of_week"`
+	Datetime  string  `json:"datetime"`
+	QueueName string  `json:"queue_name"`
+	AgentName string  `json:"agent_name"`
+	Event     string  `json:"event"`
+	UniqueID  string  `json:"uniqueid"`
+	CallerID  string  `json:"caller_id"`
+	URL       string  `json:"url"`
+	DID       string  `json:"did"`
+	RingTime  FlexInt `json:"ring_time"`
+	HoldTime  FlexInt `json:"hold_time"`
+	YearMonth string  `json:"year_month"`
+	YearWeek  string  `json:"year_week"`
+	Date      string  `json:"date"`
+	Hour      FlexInt `json:"hour"`
+	DayOfWeek FlexInt `json:"day_of_week"`
 }
 
 // AgentEvent is one row from action=agent-events.
@@ -70,20 +76,21 @@ type AgentEvent struct {
 	UniqueID  string `json:"uniqueid"`
 }
 
-// CallSearchResult is one row from action=call-search.
+// CallSearchResult is one row from action=call-search. See AnsweredCall's
+// own doc comment for why the numeric fields are FlexInt.
 type CallSearchResult struct {
-	UniqueID      string `json:"uniqueid"`
-	CallerID      string `json:"caller_id"`
-	DateStart     string `json:"date_start"`
-	DateEnd       string `json:"date_end"`
-	Event         string `json:"event"`
-	AgentName     string `json:"agent_name"`
-	QueueName     string `json:"queue_name"`
-	TalkTime      int    `json:"talk_time"`
-	TotalDuration int    `json:"total_duration"`
-	WaitTime      int    `json:"wait_time"`
-	QueueHops     int    `json:"queue_hops"`
-	RecordingFile string `json:"recording_file"`
+	UniqueID      string  `json:"uniqueid"`
+	CallerID      string  `json:"caller_id"`
+	DateStart     string  `json:"date_start"`
+	DateEnd       string  `json:"date_end"`
+	Event         string  `json:"event"`
+	AgentName     string  `json:"agent_name"`
+	QueueName     string  `json:"queue_name"`
+	TalkTime      FlexInt `json:"talk_time"`
+	TotalDuration FlexInt `json:"total_duration"`
+	WaitTime      FlexInt `json:"wait_time"`
+	QueueHops     FlexInt `json:"queue_hops"`
+	RecordingFile string  `json:"recording_file"`
 }
 
 // CallDetailRow is one timeline event for a single call. action=call-detail

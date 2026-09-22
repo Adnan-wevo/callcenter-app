@@ -92,9 +92,9 @@ func (h *Handlers) DashboardSummary(c *gin.Context) {
 	}
 
 	for _, call := range answered {
-		holdTotal += call.HoldTime
-		durationTotal += call.Duration
-		if call.RingTime <= settings.SLAInterval {
+		holdTotal += call.HoldTime.Int()
+		durationTotal += call.Duration.Int()
+		if call.RingTime.Int() <= settings.SLAInterval {
 			withinSLA++
 		}
 		row := queueAt(call.QueueName)

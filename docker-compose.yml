@@ -92,22 +92,21 @@ services:
       # the qstats database.
       CALLCENTER_DSN: "root:rootpass@tcp(mysql:3306)/callcenter?parseTime=true"
 
+      # The REAL staging pbx-worker (confirmed live in docs/extraction-plan.md's
+      # HMAC verification — reads AND writes go here now, not the local
+      # mock). PBX_CONTROL_* below defaults to these same values when unset
+      # (see config.go) — kept explicit here anyway so both are visible
+      # together at a glance.
       PBX_WORKER_MODE: hmac
-      PBX_WORKER_BASE_URL: "http://mock-pbx-worker:8081"
-      PBX_WORKER_API_KEY: local-dev-key
-      PBX_WORKER_SECRET: local-dev-secret
+      PBX_WORKER_BASE_URL: "https://sbc.wevetel.com/wevetel-pbx-worker"
+      PBX_WORKER_API_KEY: client_c67caafcfa9ecd9d
+      PBX_WORKER_SECRET: c02271da9ff0c57695b4b9db53c120a756024bb2960347cce863ff4a250d087d
 
       # pbx-worker's LIVE control surface (queue/agent snapshots + AMI
-      # commands). Defaults to the SAME mock-pbx-worker host/credentials as
-      # PBX_WORKER_* above when unset (see config.go) — mock-pbx-worker does
-      # not implement /api/index.php or /api/commands.php yet, so these are
-      # set explicitly here as a placeholder pointing at the same mock host;
-      # calls to the live-snapshot/command endpoints will 404 against the
-      # mock until it's extended. Point PBX_CONTROL_BASE_URL at a real
-      # pbx-worker to exercise this for real.
-      PBX_CONTROL_BASE_URL: "http://mock-pbx-worker:8081"
-      PBX_CONTROL_API_KEY: local-dev-key
-      PBX_CONTROL_SECRET: local-dev-secret
+      # commands) — same host, same credentials as PBX_WORKER_* above.
+      PBX_CONTROL_BASE_URL: "https://sbc.wevetel.com/wevetel-pbx-worker"
+      PBX_CONTROL_API_KEY: client_c67caafcfa9ecd9d
+      PBX_CONTROL_SECRET: c02271da9ff0c57695b4b9db53c120a756024bb2960347cce863ff4a250d087d
 
       LARAVEL_CALLBACK_BASE_URL: "http://mock-laravel:8082"
       LARAVEL_CALLBACK_PATH: /api/internal/call-center/callback-attempts
@@ -120,14 +119,19 @@ services:
       # secure/softphone/bootstrap has something real to return: an agent
       # signing in locally sees "Registered as 1001" in the panel, matching
       # what a real deployment would show, even though the fake engine never
-      # actually dials out. Point SOFTPHONE_PBX_HOST at a real PBX and flip
-      # environment.sipEngine to 'jssip' to test against one.
-      SOFTPHONE_PBX_HOST: pbx.example.invalid
+      # actually dials out. Now pointed at the real staging PBX (same host
+      # confirmed live in docs/extraction-plan.md's HMAC verification) —
+      # environment.sipEngine in the Angular app must be 'jssip' for this to
+      # mean anything; on 'fake' (the default) no network call is made
+      # regardless of what this points at.
+      SOFTPHONE_PBX_HOST: sbc.wevetel.com
       SOFTPHONE_PBX_WS_PORT: "8089"
       SOFTPHONE_PBX_WS_PATH: /ws
       SOFTPHONE_PBX_TRANSPORT: wss
-      DEV_SIP_EXTENSION: "1001"
-      DEV_SIP_PASSWORD: local-dev-sip-password
+      # DEV_SIP_EXTENSION seeding is OFF: the admin account now holds a real
+      # extension (5955) assigned via the admin API, not the dev seed — see
+      # main.go's own seeding guard, which only seeds when no row exists yet
+      # for that account, so leaving this unset here does not touch it.
 
       # SIP extension passwords are encrypted at rest with this key (see
       # internal/softphone/crypto.go). LOCAL DEV VALUE ONLY — generate a

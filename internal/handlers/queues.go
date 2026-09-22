@@ -10,30 +10,31 @@ import (
 
 // GET /api/v1/call-center/queues
 //
-// Sourced from qstats.qname directly. Whether this should instead go
-// through pbxworker.ReportsClient.QueueNames (matching how Laravel
-// actually sources queue names — see PbxReportGateway.php) is an open
-// decision, not resolved by this fix; see README.
+// Sourced from pbx-worker's queue-names action — resolves open decision D8
+// in docs/extraction-plan.md: Laravel's own PbxReportGateway::queueNames()
+// is confirmed (both by reading the source and by a live call against the
+// real staging worker) to be how queue names actually reach the UI, not a
+// direct qstats read. qstats.ListQueueNames still exists
+// (internal/db/qstats) for whatever future report genuinely needs the
+// qname table, but this endpoint no longer uses it.
 func (h *Handlers) ListQueues(c *gin.Context) {
-	rows, err := h.qstats.ListQueueNames(c.Request.Context())
+	names, err := h.pbx.QueueNames(c.Request.Context())
 	if err != nil {
 		apires.Error(c, http.StatusBadGateway, "failed to load queues", nil)
 		return
 	}
-	apires.OK(c, rows)
+	apires.OK(c, names)
 }
 
 // GET /api/v1/call-center/agents
 //
-// Sourced from qstats.qagent directly — same open-decision caveat as
-// ListQueues above. The real qagent table has no queue-linkage column, so
-// there is no per-queue filter here (an earlier version of this handler
-// assumed a queue_id filter the schema doesn't support).
+// Sourced from pbx-worker's agent-names action — same resolution as
+// ListQueues above.
 func (h *Handlers) ListAgents(c *gin.Context) {
-	rows, err := h.qstats.ListQueueAgents(c.Request.Context())
+	names, err := h.pbx.AgentNames(c.Request.Context())
 	if err != nil {
 		apires.Error(c, http.StatusBadGateway, "failed to load agents", nil)
 		return
 	}
-	apires.OK(c, rows)
+	apires.OK(c, names)
 }

@@ -22,7 +22,7 @@ func FilterShortAbandons(calls []pbxworker.UnansweredCall, thresholdSeconds int)
 
 	kept = make([]pbxworker.UnansweredCall, 0, len(calls))
 	for _, call := range calls {
-		if call.HoldTime < thresholdSeconds {
+		if call.HoldTime.Int() < thresholdSeconds {
 			excluded++
 			continue
 		}
