@@ -40,6 +40,28 @@ const ICE_SERVERS: RTCIceServer[] = [
 ];
 
 /**
+ * For a queue-routed call, Asterisk's dialplan sets the INVITE's From
+ * display-name to the queue number glued directly onto the caller's own
+ * number with no separator (queue 50000 + caller 0198202884 ->
+ * "500000198202884") — that is routing metadata for the agent leg, not a
+ * human name, but JsSIP hands it straight through as
+ * `remote_identity.display_name` with nothing to mark it as different from
+ * a real Caller ID name. The queue is already shown separately (see
+ * `primaryCallQueue`), so anything that's purely digits and ends with the
+ * caller's own number is treated as no name at all instead of being shown
+ * as one — and, since `CallSession.displayName` is what gets sent as
+ * `caller_name` when the call log is created, this also keeps that junk
+ * value out of call history.
+ */
+function cleanDisplayName(raw: string | undefined, remote: string): string | undefined {
+  const name = raw?.trim();
+  if (!name) {
+    return undefined;
+  }
+  return /^\d+$/.test(name) && name.endsWith(remote) ? undefined : name;
+}
+
+/**
  * The real engine: a SIP user agent in the browser, registered to Asterisk
  * over a secure WebSocket, with WebRTC carrying the audio.
  *
@@ -240,11 +262,12 @@ export class JsSipEngine implements SipEngine {
 
   private adoptIncoming(rtc: JsSipRTCSession): void {
     const id = this.newId();
+    const remote = rtc.remote_identity?.uri?.user ?? 'unknown';
     this.sessions.set(id, {
       id,
       direction: 'inbound',
-      remote: rtc.remote_identity?.uri?.user ?? 'unknown',
-      displayName: rtc.remote_identity?.display_name ?? undefined,
+      remote,
+      displayName: cleanDisplayName(rtc.remote_identity?.display_name, remote),
       state: 'ringing',
       muted: false,
       onHold: false,
