@@ -64,6 +64,29 @@ type JsSipRTCSession = any;
  * `caller_name` when the call log is created, this also keeps that junk
  * value out of call history.
  */
+/** JsSIP's payload on both `ended` and `failed`. */
+interface JsSipEndEvent {
+  /** Who ended it: 'local' (this browser), 'remote' (far end), or 'system'
+   *  (JsSIP itself — an ICE failure auto-terminating looks like this). */
+  originator?: string;
+  cause?: string;
+}
+
+/**
+ * Renders why a call ended, for the panel's Logs tab.
+ *
+ * Worth carrying even though a normal hangup is uninteresting: without it a
+ * log line reads "Call inbound 0198202884: ended" whether the agent hung up
+ * or the call died on its own, which is precisely the distinction needed
+ * when chasing a call that drops by itself. `originator` is the valuable
+ * half — 'local' is the agent, 'remote' is the far end, and 'system' is
+ * JsSIP terminating on its own, which is what an ICE failure looks like.
+ */
+function describeEnd(e: JsSipEndEvent | undefined): string | undefined {
+  const parts = [e?.originator, e?.cause].filter(Boolean);
+  return parts.length ? parts.join(': ') : undefined;
+}
+
 function cleanDisplayName(raw: string | undefined, remote: string): string | undefined {
   const name = raw?.trim();
   if (!name) {
@@ -294,13 +317,13 @@ export class JsSipEngine implements SipEngine {
       }),
     );
 
-    rtc.on('failed', (e: { cause?: string }) => {
-      this.update(id, (s) => (s.state = 'failed'), e?.cause);
+    rtc.on('failed', (e: JsSipEndEvent) => {
+      this.update(id, (s) => (s.state = 'failed'), describeEnd(e));
       this.forget(id);
     });
 
-    rtc.on('ended', () => {
-      this.update(id, (s) => (s.state = 'ended'));
+    rtc.on('ended', (e: JsSipEndEvent) => {
+      this.update(id, (s) => (s.state = 'ended'), describeEnd(e));
       this.forget(id);
     });
 
