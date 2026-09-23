@@ -32,6 +32,8 @@ export const PERMISSIONS = [
   'call-center.user-filters.destroy',
   'call-center.realtime-monitor.index',
   'call-center.realtime-monitor.actions',
+  'call-center.settings.index',
+  'call-center.settings.update',
   'softphone.supervise',
 ] as const;
 

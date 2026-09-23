@@ -101,6 +101,12 @@ const groups: CallCenterGroup[] = [
         icon: 'sliders',
         permission: 'call-center.user-filters.index',
       },
+      {
+        label: 'Settings',
+        route: '/settings',
+        icon: 'sliders',
+        permission: 'call-center.settings.index',
+      },
     ],
   },
 ];

@@ -1,0 +1,59 @@
+<app-page-header
+  title="Settings"
+  description="Configuration that changes report numbers — SLA target, short-abandon suppression, agent wrap-up."
+  icon="sliders"
+  iconClass="text-brand"
+/>
+
+<div class="mt-6 flex gap-1 border-b">
+  @for (cat of categories(); track cat) {
+    <button
+      type="button"
+      class="-mb-px border-b-2 px-3 py-2 text-sm font-medium capitalize transition-colors"
+      [class]="
+        activeCategory() === cat
+          ? 'border-brand text-brand'
+          : 'text-muted-foreground hover:text-foreground border-transparent'
+      "
+      (click)="switchCategory(cat)"
+    >
+      {{ cat }}
+    </button>
+  }
+</div>
+
+@if (loading()) {
+  <div class="mt-6 flex justify-center py-12">
+    <div class="border-muted-foreground/30 border-t-foreground size-6 animate-spin rounded-full border-2"></div>
+  </div>
+} @else {
+  <div class="card mt-4 p-5">
+    @if (rows().length === 0) {
+      <p class="text-muted-foreground py-8 text-center text-sm">No settings in this category.</p>
+    } @else {
+      <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        @for (row of rows(); track row.key) {
+          <div class="grid gap-1.5">
+            <label class="text-sm font-medium">{{ label(row.key) }}</label>
+            <input
+              type="text"
+              class="input"
+              inputmode="numeric"
+              [value]="values()[row.key]"
+              (input)="setValue(row.key, $any($event.target).value)"
+            />
+            @if (row.description) {
+              <p class="text-muted-foreground text-xs">{{ row.description }}</p>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="mt-6 flex justify-end" *hasPermission="'call-center.settings.update'">
+        <button type="button" class="btn btn-default" [disabled]="saving()" (click)="save()">
+          {{ saving() ? 'Saving…' : 'Save changes' }}
+        </button>
+      </div>
+    }
+  </div>
+}
