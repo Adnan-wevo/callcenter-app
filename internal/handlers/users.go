@@ -105,12 +105,24 @@ func (h *Handlers) ListManagedUsers(c *gin.Context) {
 		out = append(out, adminUser{ID: u.ID, Name: u.Name, Email: u.Email, Roles: roles})
 	}
 
+	// v3's own counters, not the requested ones: it only accepts certain
+	// page sizes and quietly substitutes its default for anything else, so
+	// echoing the request back would tell the pager a size that was never
+	// applied and a page count computed from it.
 	lastPage := meta.LastPage
 	if lastPage < 1 {
 		lastPage = 1
 	}
+	appliedPerPage := meta.PerPage
+	if appliedPerPage < 1 {
+		appliedPerPage = perPage
+	}
+	appliedPage := meta.CurrentPage
+	if appliedPage < 1 {
+		appliedPage = page
+	}
 	apires.Collection(c, http.StatusOK, out, apires.Meta{
-		Page: page, PerPage: perPage, Total: meta.Total, LastPage: lastPage,
+		Page: appliedPage, PerPage: appliedPerPage, Total: meta.Total, LastPage: lastPage,
 	})
 }
 

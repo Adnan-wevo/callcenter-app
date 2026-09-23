@@ -32,9 +32,7 @@ func (c *Client) ListUsers(ctx context.Context, page, perPage int, search string
 	if page > 0 {
 		q.Set("page", strconv.Itoa(page))
 	}
-	if perPage > 0 {
-		q.Set("per_page", strconv.Itoa(perPage))
-	}
+	q.Set("per_page", strconv.Itoa(snapPerPage(perPage)))
 	if search != "" {
 		q.Set("search", search)
 	}
@@ -50,6 +48,28 @@ func (c *Client) ListUsers(ctx context.Context, page, perPage int, search string
 		return nil, Page{}, err
 	}
 	return out.Data, out.Meta, nil
+}
+
+// allowedPerPage is what v3's datatables endpoints accept. Anything else is
+// not an error there — it is silently replaced with the default of 10, so a
+// caller asking for 25 gets 10 rows back and a page count computed against a
+// size it never asked for. Snapping here keeps that mismatch out of the API
+// this service presents.
+var allowedPerPage = []int{10, 50, 100, 500, 1000}
+
+// snapPerPage rounds a requested size DOWN to the nearest v3 accepts, so a
+// page never carries more rows than the caller asked to render.
+func snapPerPage(requested int) int {
+	if requested <= 0 {
+		return allowedPerPage[0]
+	}
+	best := allowedPerPage[0]
+	for _, allowed := range allowedPerPage {
+		if allowed <= requested {
+			best = allowed
+		}
+	}
+	return best
 }
 
 // CreateUser adds an account. v3 hashes the password; it is never stored by

@@ -118,6 +118,12 @@ export const routes: Routes = [
         (m) => m.SCHEDULED_REPORTS_ROUTES,
       ),
   },
+  {
+    path: 'users',
+    canActivate: [authGuard, requirePermission('call-center.users.index')],
+    resolve: { authz: permissionsResolver },
+    loadChildren: () => import('./features/users/users.routes').then((m) => m.USERS_ROUTES),
+  },
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   {
     // An unknown URL is a 404, not a silent bounce to the dashboard: the

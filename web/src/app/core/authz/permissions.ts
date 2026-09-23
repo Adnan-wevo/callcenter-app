@@ -42,6 +42,10 @@ export const PERMISSIONS = [
   'call-center.scheduled-reports.store',
   'call-center.scheduled-reports.update',
   'call-center.scheduled-reports.destroy',
+  'call-center.users.index',
+  'call-center.users.store',
+  'call-center.users.update',
+  'call-center.users.destroy',
   'softphone.supervise',
 ] as const;
 

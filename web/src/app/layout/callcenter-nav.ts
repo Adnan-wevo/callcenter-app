@@ -90,6 +90,12 @@ const groups: CallCenterGroup[] = [
     label: 'Administration',
     items: [
       {
+        label: 'Users',
+        route: '/users',
+        icon: 'users',
+        permission: 'call-center.users.index',
+      },
+      {
         label: 'SIP Extensions',
         route: '/sip-extensions',
         icon: 'phone-call',
