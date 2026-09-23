@@ -241,20 +241,28 @@ export class JsSipEngine implements SipEngine {
     this.rtc.get(callId)?.terminate();
   }
 
+  // Hold and resume are re-INVITEs the far end can refuse, so neither sets
+  // the state itself — JsSIP's own 'hold'/'unhold' events do, from bind(),
+  // once it has actually happened. Setting it here regardless is how the
+  // button came to show "on hold" for a hold that never took effect.
   async holdCall(callId: CallId): Promise<void> {
-    this.rtc.get(callId)?.hold();
-    this.update(callId, (s) => {
-      s.onHold = true;
-      s.state = 'held';
-    });
+    const rtc = this.rtc.get(callId);
+    if (!rtc) {
+      return;
+    }
+    if (rtc.hold() === false) {
+      this.diagnostics$.next({ level: 'error', message: 'Hold was refused' });
+    }
   }
 
   async resumeCall(callId: CallId): Promise<void> {
-    this.rtc.get(callId)?.unhold();
-    this.update(callId, (s) => {
-      s.onHold = false;
-      s.state = 'answered';
-    });
+    const rtc = this.rtc.get(callId);
+    if (!rtc) {
+      return;
+    }
+    if (rtc.unhold() === false) {
+      this.diagnostics$.next({ level: 'error', message: 'Resume was refused' });
+    }
   }
 
   async muteCall(callId: CallId, enabled: boolean): Promise<void> {
@@ -277,6 +285,12 @@ export class JsSipEngine implements SipEngine {
   async transferCall(request: CallTransferRequest): Promise<void> {
     const rtc = this.rtc.get(request.callId);
     if (!rtc || !this.config) {
+      // Silently doing nothing here is what made a failed transfer
+      // indistinguishable from one that was never attempted.
+      this.diagnostics$.next({
+        level: 'error',
+        message: 'Transfer failed: that call is no longer active',
+      });
       return;
     }
     // Blind only for now. An attended transfer needs a second call and a
@@ -285,7 +299,34 @@ export class JsSipEngine implements SipEngine {
     if (request.kind === 'attended') {
       throw new Error('JsSipEngine: attended transfer is not implemented yet');
     }
-    rtc.refer(`sip:${request.target}@${this.config.server}`);
+
+    const target = `sip:${request.target}@${this.config.server}`;
+    this.diagnostics$.next({ level: 'info', message: `Transferring to ${request.target}` });
+
+    // A REFER is a REQUEST. Asterisk can refuse it — no such extension, or
+    // the dialplan declining — and the call simply carries on, so the
+    // outcome has to be reported rather than assumed. Without this the
+    // agent sees the form close and nothing else, whether it worked or not.
+    try {
+      const refer = rtc.refer(target);
+      refer?.on?.('accepted', () =>
+        this.diagnostics$.next({
+          level: 'info',
+          message: `Transfer to ${request.target} accepted`,
+        }),
+      );
+      refer?.on?.('failed', (e: JsSipEndEvent) =>
+        this.diagnostics$.next({
+          level: 'error',
+          message: `Transfer to ${request.target} refused${e?.cause ? ': ' + e.cause : ''}`,
+        }),
+      );
+    } catch (err) {
+      this.diagnostics$.next({
+        level: 'error',
+        message: `Transfer to ${request.target} could not be sent: ${String(err)}`,
+      });
+    }
   }
 
   async dispose(): Promise<void> {
@@ -326,6 +367,20 @@ export class JsSipEngine implements SipEngine {
       this.update(id, (s) => {
         s.state = 'answered';
         s.answeredAt = new Date();
+      }),
+    );
+
+    // The authority on whether the call is actually held — see holdCall.
+    rtc.on('hold', () =>
+      this.update(id, (s) => {
+        s.onHold = true;
+        s.state = 'held';
+      }),
+    );
+    rtc.on('unhold', () =>
+      this.update(id, (s) => {
+        s.onHold = false;
+        s.state = 'answered';
       }),
     );
 
