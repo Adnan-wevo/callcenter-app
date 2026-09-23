@@ -235,11 +235,19 @@
                      be conspicuous and offer the way back. -->
                 <div class="mt-2 w-full rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
                   <p class="text-left text-xs">
-                    Speaking privately — the caller is on hold. Hang up to complete the transfer.
+                    Speaking privately — the caller is on hold and cannot hear this.
                   </p>
-                  <button type="button" class="btn btn-outline btn-sm mt-2 w-full" (click)="phone.attendedTransferCancel()">
-                    Cancel and take the caller back
-                  </button>
+                  <div class="mt-2 flex gap-2">
+                    <button type="button" class="btn btn-default btn-sm flex-1" (click)="completeTransfer(call)">
+                      Complete transfer
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm flex-1" (click)="phone.attendedTransferCancel()">
+                      Take caller back
+                    </button>
+                  </div>
+                  <p class="text-muted-foreground mt-1.5 text-left text-[11px]">
+                    Completing drops you out and connects the caller to them.
+                  </p>
                 </div>
               }
 

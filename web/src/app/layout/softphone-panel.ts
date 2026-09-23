@@ -200,6 +200,21 @@ export class SoftphonePanelComponent {
     this.showConferenceInput.set(false);
   }
 
+  /**
+   * Finish an attended transfer by hanging up this agent's own leg.
+   *
+   * That IS the completion step — Asterisk's Atxfer hands the caller to the
+   * target when the transferring agent drops out, which is why v3 exposes
+   * no "complete" endpoint (see its TransferService.Attended, whose CDR
+   * note says the row is written "when the agent eventually hangs up").
+   * It needs its own button regardless: reaching for the red hangup to
+   * complete a transfer reads as abandoning the caller, so an agent who is
+   * not told simply will not do it.
+   */
+  protected completeTransfer(call: CallSession): void {
+    this.phone.hangup(call.id);
+  }
+
   protected toggleConferenceMute(): void {
     this.phone.conferenceMute(!this.phone.conferenceMuted());
   }

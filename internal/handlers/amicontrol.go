@@ -194,6 +194,26 @@ func (h *Handlers) TransferAttended(c *gin.Context) {
 	respondAMI(c, h.pbxV3.TransferAttended(c.Request.Context(), ext, body.Extension), "consulting")
 }
 
+// POST /api/v1/secure/softphone/transfer/blind
+//
+// The same handover the softphone can ask for over SIP, done by the PBX
+// instead. Worth having both: the in-browser version sends a REFER, and a
+// chan_sip dialplan is free to refuse an in-dialog REFER from an extension
+// — in which case the call simply carries on and the agent sees nothing
+// happen. This route does not involve the browser in the transfer at all.
+func (h *Handlers) TransferBlind(c *gin.Context) {
+	ext, ok := h.callerExtension(c)
+	if !ok {
+		return
+	}
+	var body attendedTransferBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		apires.Error(c, http.StatusUnprocessableEntity, "extension is required", nil)
+		return
+	}
+	respondAMI(c, h.pbxV3.TransferBlind(c.Request.Context(), ext, body.Extension), "transferred")
+}
+
 // POST /api/v1/secure/softphone/transfer/attended/cancel — take the caller
 // back rather than completing the handover.
 func (h *Handlers) TransferAttendedCancel(c *gin.Context) {

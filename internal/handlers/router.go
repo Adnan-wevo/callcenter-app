@@ -102,6 +102,7 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 			sp.POST("/conference/end", h.ConferenceEnd)
 			sp.POST("/conference/leave", h.ConferenceLeave)
 			sp.POST("/conference/mute", h.ConferenceMute)
+			sp.POST("/transfer/blind", h.TransferBlind)
 			sp.POST("/transfer/attended", h.TransferAttended)
 			sp.POST("/transfer/attended/cancel", h.TransferAttendedCancel)
 
