@@ -36,7 +36,7 @@ func (h *Handlers) Login(c *gin.Context) {
 		return
 	}
 
-	token, expiresIn, err := h.auth.Login(body.Username, body.Password)
+	token, expiresIn, err := h.auth.Login(c.Request.Context(), body.Username, body.Password)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			apires.Error(c, http.StatusUnauthorized, "Username or password is incorrect.", nil)

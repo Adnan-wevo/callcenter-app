@@ -100,6 +100,16 @@ func main() {
 	}
 	authSvc := auth.NewService(userStore, cfg.JWTSecret, cfg.JWTTTL)
 
+	// With v3 configured, its user administration becomes this service's
+	// directory too: the local store holds two seeded accounts and cannot
+	// grow a third, while v3 already has users, roles and permissions. The
+	// local store is still tried first, so those seeded accounts keep
+	// working and their passwords never leave this process.
+	if pbxV3Client != nil {
+		authSvc.UseExternalDirectory(pbxv3.NewAuthDirectory(pbxV3Client))
+		log.Printf("auth: pbx-worker v3 accepted as an external user directory")
+	}
+
 	// The SIP extension directory: a real table now (sip_extensions, in the
 	// same callcenter database as call_logs), not the in-memory placeholder
 	// an earlier round of this service used. See internal/softphone.

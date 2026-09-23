@@ -74,9 +74,15 @@ type loginResponse struct {
 	TokenType    string `json:"token_type"`
 }
 
-// login exchanges the configured credentials for a fresh token.
+// login exchanges this client's own configured credentials for a token.
 func (c *Client) login(ctx context.Context) (string, error) {
-	body, err := json.Marshal(map[string]string{"email": c.email, "password": c.password})
+	return c.loginAs(ctx, c.email, c.password)
+}
+
+// loginAs authenticates one specific set of credentials and returns the
+// access token, caching nothing — see Login for why that matters.
+func (c *Client) loginAs(ctx context.Context, email, password string) (string, error) {
+	body, err := json.Marshal(map[string]string{"email": email, "password": password})
 	if err != nil {
 		return "", fmt.Errorf("pbxv3: encode login: %w", err)
 	}

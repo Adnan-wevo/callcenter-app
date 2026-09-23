@@ -25,6 +25,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"sort"
 	"strings"
@@ -234,6 +235,23 @@ func (s *MemoryStore) ByID(id string) (*User, bool) {
 	return u, ok
 }
 
+// Upsert adds or replaces a user. Used to mirror an externally
+// authenticated identity in, so per-request lookups by id resolve.
+func (s *MemoryStore) Upsert(u *User) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, ok := s.byID[u.ID]; ok {
+		// Preserve row-level restrictions already configured against this
+		// account — those are administered here, not in the external
+		// directory, and a re-login must not silently clear them.
+		u.AllowedQueues = existing.AllowedQueues
+		u.AllowedAgents = existing.AllowedAgents
+		delete(s.byUsersn, strings.ToLower(existing.Username))
+	}
+	s.byID[u.ID] = u
+	s.byUsersn[strings.ToLower(u.Username)] = u
+}
+
 func (s *MemoryStore) SetFilters(userID string, queues, agents []string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -326,30 +344,86 @@ type Service struct {
 	store     Store
 	jwtSecret string
 	tokenTTL  time.Duration
+	// external is optional; nil means this service's own store is the only
+	// authority. See internal/auth/external.go.
+	external ExternalDirectory
 }
 
 func NewService(store Store, jwtSecret string, tokenTTL time.Duration) *Service {
 	return &Service{store: store, jwtSecret: jwtSecret, tokenTTL: tokenTTL}
 }
 
+// UseExternalDirectory lets sign-ins fall through to an outside directory
+// when the local store does not recognise the credentials.
+func (s *Service) UseExternalDirectory(d ExternalDirectory) {
+	s.external = d
+}
+
 // Login verifies credentials and returns a signed token plus its lifetime.
 //
 // A wrong username and a wrong password both return ErrInvalidCredentials, so
 // the response cannot be used to enumerate accounts.
-func (s *Service) Login(username, password string) (token string, expiresIn int, err error) {
+func (s *Service) Login(ctx context.Context, username, password string) (token string, expiresIn int, err error) {
 	u, ok := s.store.ByUsername(username)
+	if ok && pwhash.Verify(u.PasswordHash, password) == nil {
+		return s.issue(u.ID)
+	}
+
+	// The local store is checked FIRST so the seeded accounts keep working
+	// and their passwords are never sent to an outside directory.
+	if s.external != nil {
+		if id, xerr := s.adoptExternal(ctx, username, password); xerr == nil {
+			return s.issue(id)
+		}
+	}
+
 	if !ok {
 		// Spend roughly the same work as a real verification would, so the
 		// response time does not disclose whether the account exists.
 		_ = pwhash.Verify(dummyHash, password)
-		return "", 0, ErrInvalidCredentials
+	}
+	return "", 0, ErrInvalidCredentials
+}
+
+// adoptExternal authenticates against the external directory and mirrors the
+// result into the local store, returning the user id to issue a token for.
+//
+// The mirroring is required, not a cache: the token this service issues
+// carries only a user id (see issue below), and every subsequent request
+// resolves authority by looking that id up in the store. A user the store
+// has never heard of would authenticate once and then be rejected by the
+// very next request.
+func (s *Service) adoptExternal(ctx context.Context, username, password string) (string, error) {
+	identity, err := s.external.Authenticate(ctx, username, password)
+	if err != nil {
+		return "", err
 	}
 
-	if err := pwhash.Verify(u.PasswordHash, password); err != nil {
-		return "", 0, ErrInvalidCredentials
+	perms, super := permissionsForRoles(identity.Roles)
+	name := identity.Email
+	if name == "" {
+		name = username
 	}
 
-	token, err = jwtsig.Sign(s.jwtSecret, u.ID, s.tokenTTL)
+	upsert, ok := s.store.(interface{ Upsert(*User) })
+	if !ok {
+		return "", ErrInvalidCredentials
+	}
+	upsert.Upsert(&User{
+		ID:          identity.ID,
+		Username:    name,
+		Roles:       identity.Roles,
+		Permissions: perms,
+		Super:       super,
+		// No PasswordHash: the external directory verifies the password, and
+		// storing a local one would create a second credential for the same
+		// account that nothing keeps in step with it.
+	})
+	return identity.ID, nil
+}
+
+func (s *Service) issue(userID string) (string, int, error) {
+	token, err := jwtsig.Sign(s.jwtSecret, userID, s.tokenTTL)
 	if err != nil {
 		return "", 0, err
 	}
