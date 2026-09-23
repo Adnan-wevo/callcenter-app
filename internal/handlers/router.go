@@ -106,6 +106,12 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 			admin.DELETE("/:id", middleware.RequirePermission(auth.PermSIPExtensionsDestroy), h.DeleteSIPExtension)
 		}
 
+		// The user picker the SIP Extensions admin screen's create/edit form
+		// needs ("assign to which user") — gated the same as reading the
+		// extensions list itself, not a separate permission, since it exists
+		// only to serve that one screen today.
+		secure.GET("/admin/users", middleware.RequirePermission(auth.PermSIPExtensionsIndex), h.ListUsers)
+
 		cc := secure.Group("/call-center")
 		{
 			// Lookups feed the filter bar on every report screen, so they are

@@ -82,6 +82,13 @@ export const routes: Routes = [
         (m) => m.REALTIME_MONITOR_ROUTES,
       ),
   },
+  {
+    path: 'sip-extensions',
+    canActivate: [authGuard, requirePermission('call-center.sip-extensions.index')],
+    resolve: { authz: permissionsResolver },
+    loadChildren: () =>
+      import('./features/sip-extensions/sip-extensions.routes').then((m) => m.SIP_EXTENSIONS_ROUTES),
+  },
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   {
     // An unknown URL is a 404, not a silent bounce to the dashboard: the

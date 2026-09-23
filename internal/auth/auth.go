@@ -26,6 +26,7 @@ package auth
 
 import (
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -138,6 +139,12 @@ func (u *User) Can(perm string) bool {
 type Store interface {
 	ByUsername(username string) (*User, bool)
 	ByID(id string) (*User, bool)
+	// List returns every user this service knows about, ordered by
+	// username. There is no user DIRECTORY anywhere else in this service
+	// (see internal/softphone.ListItem's own doc comment on the same gap)
+	// — this is the seam an admin screen that needs "which user" (assigning
+	// a SIP extension, say) reads from, same as ByUsername/ByID above.
+	List() []*User
 }
 
 // MemoryStore is an in-process Store. Dev/local use only.
@@ -171,6 +178,19 @@ func (s *MemoryStore) ByID(id string) (*User, bool) {
 	defer s.mu.RUnlock()
 	u, ok := s.byID[id]
 	return u, ok
+}
+
+func (s *MemoryStore) List() []*User {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]*User, 0, len(s.byID))
+	for _, u := range s.byID {
+		out = append(out, u)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i].Username) < strings.ToLower(out[j].Username)
+	})
+	return out
 }
 
 // NewDevStore seeds two accounts for local use, so the permission gating is
@@ -268,6 +288,12 @@ func (s *Service) Login(username, password string) (token string, expiresIn int,
 		return "", 0, err
 	}
 	return token, int(s.tokenTTL.Seconds()), nil
+}
+
+// ListUsers returns every user this service's store knows about — the seam
+// an admin picker (SIP Extensions' "assign to user") reads from.
+func (s *Service) ListUsers() []*User {
+	return s.store.List()
 }
 
 // Verify checks a bearer token and resolves the user behind it. The user is

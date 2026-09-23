@@ -86,6 +86,17 @@ const groups: CallCenterGroup[] = [
       },
     ],
   },
+  {
+    label: 'Administration',
+    items: [
+      {
+        label: 'SIP Extensions',
+        route: '/sip-extensions',
+        icon: 'phone-call',
+        permission: 'call-center.sip-extensions.index',
+      },
+    ],
+  },
 ];
 
 export const CALLCENTER_NAV: NavGroup[] = groups;

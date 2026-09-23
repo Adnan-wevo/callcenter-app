@@ -78,6 +78,24 @@ export class ApiService {
       );
   }
 
+  put<T>(path: string, body?: unknown, opts?: { silent?: boolean }): Observable<T> {
+    return this.http
+      .put<ApiEnvelope<T>>(this.url(path), body ?? {}, { context: contextFor(opts) })
+      .pipe(
+        map((envelope) => envelope.data),
+        catchError(translate),
+      );
+  }
+
+  delete<T>(path: string, opts?: { silent?: boolean }): Observable<T> {
+    return this.http
+      .delete<ApiEnvelope<T>>(this.url(path), { context: contextFor(opts) })
+      .pipe(
+        map((envelope) => envelope.data),
+        catchError(translate),
+      );
+  }
+
   private url(path: string): string {
     return `${this.base}/${path.replace(/^\/+/, '')}`;
   }
