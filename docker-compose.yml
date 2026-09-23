@@ -112,6 +112,14 @@ services:
       PBX_CONTROL_API_KEY: client_c67caafcfa9ecd9d
       PBX_CONTROL_SECRET: c02271da9ff0c57695b4b9db53c120a756024bb2960347cce863ff4a250d087d
 
+      # pbx-worker v3 (the Go rewrite) — JWT REST API on its own port,
+      # separate from the HMAC v2 surface above. Reaches AMI directly, so a
+      # queue pause answers on the request instead of after v2's 500ms
+      # command-queue poll. Unset this to put every caller back on v2.
+      PBX_V3_BASE_URL: "http://sbc.wevetel.com:8101/wmpbxworker"
+      PBX_V3_EMAIL: super@pbx.local
+      PBX_V3_PASSWORD: password123
+
       LARAVEL_CALLBACK_BASE_URL: "http://mock-laravel:8082"
       LARAVEL_CALLBACK_PATH: /api/internal/call-center/callback-attempts
       LARAVEL_CALLBACK_API_KEY: local-dev-key

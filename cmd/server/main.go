@@ -15,6 +15,7 @@ import (
 	"callcenter-service/internal/db/qstats"
 	"callcenter-service/internal/gateway/laravel"
 	"callcenter-service/internal/gateway/pbxcontrol"
+	"callcenter-service/internal/gateway/pbxv3"
 	"callcenter-service/internal/gateway/pbxworker"
 	"callcenter-service/internal/handlers"
 	"callcenter-service/internal/queuegroups"
@@ -70,6 +71,19 @@ func main() {
 		cfg.PBXControlBaseURL,
 		hmacsig.Credentials{APIKey: cfg.PBXControlAPIKey, Secret: cfg.PBXControlSecret},
 	)
+
+	// pbx-worker v3. Nil when unconfigured, which leaves every caller on
+	// the v2 client above — the migration is per-endpoint, not a cutover.
+	var pbxV3Client *pbxv3.Client
+	if cfg.PBXV3BaseURL != "" {
+		pbxV3Client = pbxv3.New(
+			&http.Client{Timeout: 30 * time.Second},
+			cfg.PBXV3BaseURL,
+			cfg.PBXV3Email,
+			cfg.PBXV3Password,
+		)
+		log.Printf("pbx-worker v3 enabled: %s", cfg.PBXV3BaseURL)
+	}
 
 	callbackClient := laravel.NewHMACCallbackClient(
 		&http.Client{Timeout: 15 * time.Second},
@@ -138,7 +152,7 @@ func main() {
 		},
 	)
 
-	h := handlers.New(qstatsRepo, pbxClient, callbackClient, authSvc, softphoneSvc, callLogRepo, pbxControlClient, sipExtensionRepo, settingsRepo, queueGroupsRepo, scheduledReportsRepo)
+	h := handlers.New(qstatsRepo, pbxClient, callbackClient, authSvc, softphoneSvc, callLogRepo, pbxControlClient, pbxV3Client, sipExtensionRepo, settingsRepo, queueGroupsRepo, scheduledReportsRepo)
 	router := handlers.NewRouter(h, authSvc, cfg.CORSOrigins)
 
 	addr := ":" + cfg.HTTPPort

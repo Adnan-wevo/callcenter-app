@@ -85,6 +85,18 @@ type Config struct {
 	PBXControlAPIKey  string
 	PBXControlSecret  string
 
+	// pbx-worker v3 (the Go rewrite): a JWT-authenticated REST API on its
+	// own host/port, unrelated to the PBXWorker*/PBXControl* HMAC surface
+	// above. Reaches AMI directly instead of through v2's submit-then-poll
+	// command queue, so a queue pause answers on the request rather than
+	// after a 500ms poll tick — see internal/gateway/pbxv3.
+	//
+	// Empty PBXV3BaseURL disables it and leaves every caller on v2, which
+	// is what makes this safe to roll out one endpoint at a time.
+	PBXV3BaseURL  string
+	PBXV3Email    string
+	PBXV3Password string
+
 	// Outbound webhook back to Laravel (ad-hoc callback attempts).
 	LaravelCallbackBaseURL string
 	LaravelCallbackPath    string // TODO: exact route unconfirmed, see gateway/laravel
@@ -140,6 +152,10 @@ func Load() Config {
 		PBXControlBaseURL: getenv("PBX_CONTROL_BASE_URL", getenv("PBX_WORKER_BASE_URL", "")),
 		PBXControlAPIKey:  getenv("PBX_CONTROL_API_KEY", getenv("PBX_WORKER_API_KEY", "")),
 		PBXControlSecret:  getenv("PBX_CONTROL_SECRET", getenv("PBX_WORKER_SECRET", "")),
+
+		PBXV3BaseURL:  getenv("PBX_V3_BASE_URL", ""),
+		PBXV3Email:    getenv("PBX_V3_EMAIL", ""),
+		PBXV3Password: getenv("PBX_V3_PASSWORD", ""),
 
 		LaravelCallbackBaseURL: getenv("LARAVEL_CALLBACK_BASE_URL", ""),
 		// TODO: confirm real path against Laravel reference code.

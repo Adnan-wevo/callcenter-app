@@ -9,6 +9,7 @@ import (
 
 	"callcenter-service/internal/apires"
 	"callcenter-service/internal/gateway/pbxcontrol"
+	"callcenter-service/internal/gateway/pbxv3"
 	"callcenter-service/internal/middleware"
 )
 
@@ -54,8 +55,9 @@ func (h *Handlers) dispatchAndRespond(c *gin.Context, action string, payload any
 	}
 }
 
-// interfaceFor builds the AMI Interface string (e.g. "PJSIP/1001") for the
-// calling agent's own extension — queue login/logout/pause/unpause always
+// interfaceFor resolves the AMI Interface string for the calling agent's
+// own extension (see queueInterfaceFor) — queue login/logout/pause/unpause
+// always
 // act on the CALLER's own membership, never an interface named in the
 // request body, for the same reason the callback write-path takes the
 // agent id from the token (see handlers/callback.go): an endpoint that took
@@ -196,6 +198,35 @@ type pauseBody struct {
 	Reason string `json:"reason"`
 }
 
+// pauseViaV3 applies a pause/unpause through pbx-worker v3 and writes the
+// response, reporting false when v3 is not configured so the caller falls
+// back to the v2 command queue.
+//
+// The win is latency, not capability: v2 writes the AMI action to a queue
+// and polls for the outcome every 500ms (pbxcontrol.Client.Dispatch), so
+// even a command the switch applies instantly cannot be confirmed for half
+// a second. v3 issues it on the request and answers with the result.
+func (h *Handlers) pauseViaV3(c *gin.Context, iface, queue string, paused bool) bool {
+	if h.pbxV3 == nil {
+		return false
+	}
+	err := h.pbxV3.AgentPause(c.Request.Context(), pbxv3.PauseRequest{
+		Interface: iface,
+		Paused:    paused,
+		Queue:     queue,
+	})
+	if err != nil {
+		apires.Error(c, http.StatusBadGateway, "could not reach the PBX", nil)
+		return true
+	}
+	verb := "resumed"
+	if paused {
+		verb = "paused"
+	}
+	apires.Item(c, http.StatusOK, gin.H{"status": verb})
+	return true
+}
+
 // POST /api/v1/secure/softphone/queue/pause
 func (h *Handlers) QueuePause(c *gin.Context) {
 	iface, ok := h.interfaceFor(c)
@@ -204,6 +235,9 @@ func (h *Handlers) QueuePause(c *gin.Context) {
 	}
 	var body pauseBody
 	_ = c.ShouldBindJSON(&body)
+	if h.pauseViaV3(c, iface, body.Queue, true) {
+		return
+	}
 	h.dispatchAndRespond(c, "pause", pbxcontrol.PausePayload{
 		Interface: iface,
 		Queue:     body.Queue,
@@ -219,6 +253,9 @@ func (h *Handlers) QueueUnpause(c *gin.Context) {
 	}
 	var body pauseBody
 	_ = c.ShouldBindJSON(&body)
+	if h.pauseViaV3(c, iface, body.Queue, false) {
+		return
+	}
 	h.dispatchAndRespond(c, "unpause", pbxcontrol.PausePayload{
 		Interface: iface,
 		Queue:     body.Queue,
@@ -246,6 +283,9 @@ func (h *Handlers) QueueAgentPause(c *gin.Context) {
 		apires.Error(c, http.StatusUnprocessableEntity, "interface is required", nil)
 		return
 	}
+	if h.pauseViaV3(c, body.Interface, body.Queue, true) {
+		return
+	}
 	h.dispatchAndRespond(c, "pause", pbxcontrol.PausePayload{
 		Interface: body.Interface,
 		Queue:     body.Queue,
@@ -258,6 +298,9 @@ func (h *Handlers) QueueAgentUnpause(c *gin.Context) {
 	var body agentPauseBody
 	if err := c.ShouldBindJSON(&body); err != nil {
 		apires.Error(c, http.StatusUnprocessableEntity, "interface is required", nil)
+		return
+	}
+	if h.pauseViaV3(c, body.Interface, body.Queue, false) {
 		return
 	}
 	h.dispatchAndRespond(c, "unpause", pbxcontrol.PausePayload{

@@ -16,6 +16,7 @@ import (
 	"callcenter-service/internal/db/qstats"
 	"callcenter-service/internal/gateway/laravel"
 	"callcenter-service/internal/gateway/pbxcontrol"
+	"callcenter-service/internal/gateway/pbxv3"
 	"callcenter-service/internal/gateway/pbxworker"
 	"callcenter-service/internal/queuegroups"
 	"callcenter-service/internal/reports"
@@ -24,13 +25,16 @@ import (
 )
 
 type Handlers struct {
-	qstats           *qstats.Repository
-	pbx              pbxworker.ReportsClient
-	laravelCallback  laravel.CallbackClient
-	auth             *auth.Service
-	softphone        *softphone.Service
-	callLogs         *calllog.Repository
-	pbxControl       *pbxcontrol.Client
+	qstats          *qstats.Repository
+	pbx             pbxworker.ReportsClient
+	laravelCallback laravel.CallbackClient
+	auth            *auth.Service
+	softphone       *softphone.Service
+	callLogs        *calllog.Repository
+	pbxControl      *pbxcontrol.Client
+	// pbxV3 is nil unless PBX_V3_BASE_URL is set; every caller must handle
+	// that and fall back to the v2 path above.
+	pbxV3            *pbxv3.Client
 	sipExtensions    *softphone.Repository
 	settings         *callcentersettings.Repository
 	queueGroups      *queuegroups.Repository
@@ -45,6 +49,7 @@ func New(
 	softphoneSvc *softphone.Service,
 	callLogs *calllog.Repository,
 	pbxControl *pbxcontrol.Client,
+	pbxV3 *pbxv3.Client,
 	sipExtensions *softphone.Repository,
 	settings *callcentersettings.Repository,
 	queueGroups *queuegroups.Repository,
@@ -58,6 +63,7 @@ func New(
 		softphone:        softphoneSvc,
 		callLogs:         callLogs,
 		pbxControl:       pbxControl,
+		pbxV3:            pbxV3,
 		sipExtensions:    sipExtensions,
 		settings:         settings,
 		queueGroups:      queueGroups,
