@@ -376,6 +376,20 @@ export class JsSipEngine implements SipEngine {
       // and with rtptimeout set, it hangs the call up a minute later. That
       // is indistinguishable from a normal hangup in the call log, which is
       // why it gets its own line here.
+      // connectionState covers DTLS as well as ICE. The distinction matters
+      // here: `encryption=yes`/`dtlsenable=yes` on the peer means media is
+      // SRTP, so ICE can reach connected — a working path — while the DTLS
+      // handshake still fails, leaving Asterisk with nothing it can decrypt
+      // and therefore no RTP as far as rtptimeout is concerned. ICE state
+      // alone cannot tell those apart.
+      peerconnection.addEventListener('connectionstatechange', () => {
+        const state = peerconnection.connectionState;
+        this.diagnostics$.next({
+          level: state === 'failed' ? 'error' : 'info',
+          message: `peer connection ${state}`,
+        });
+      });
+
       peerconnection.addEventListener('iceconnectionstatechange', () => {
         const state = peerconnection.iceConnectionState;
         this.diagnostics$.next({
