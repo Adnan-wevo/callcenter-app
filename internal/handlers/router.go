@@ -93,6 +93,22 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 			sp.POST("/queue/agent-pause", supervise, h.QueueAgentPause)
 			sp.POST("/queue/agent-unpause", supervise, h.QueueAgentUnpause)
 			sp.POST("/queue/agent-logout", supervise, h.QueueAgentLogout)
+
+			// Conference and attended transfer, over v3's AMI surface.
+			// Authentication only, like queue pause and the existing
+			// self-service transfer: every one of these acts on the
+			// CALLER's own call, never on somebody else's.
+			sp.POST("/conference/start", h.ConferenceStart)
+			sp.POST("/conference/end", h.ConferenceEnd)
+			sp.POST("/conference/leave", h.ConferenceLeave)
+			sp.POST("/conference/mute", h.ConferenceMute)
+			sp.POST("/transfer/attended", h.TransferAttended)
+			sp.POST("/transfer/attended/cancel", h.TransferAttendedCancel)
+
+			// Listening to somebody ELSE's call, so the same boundary the
+			// existing spy endpoints sit behind.
+			sp.POST("/whisper", supervise, h.WhisperStart)
+			sp.POST("/supervise", supervise, h.SupervisionStart)
 		}
 
 		// SIP extension administration — who may register as which
