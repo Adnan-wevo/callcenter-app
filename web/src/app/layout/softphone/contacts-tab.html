@@ -1,0 +1,59 @@
+<div class="mb-2 flex items-center gap-1.5">
+  <input
+    type="search"
+    class="input h-8 min-w-0 flex-1 text-sm"
+    placeholder="Search extension…"
+    aria-label="Search contacts"
+    [value]="search()"
+    (input)="search.set($any($event.target).value); page.set(1)"
+  />
+  <select class="input h-8 w-auto text-sm" aria-label="Filter by status" [value]="statusFilter()" (change)="statusFilter.set($any($event.target).value); page.set(1)">
+    <option value="">All</option>
+    <option value="online">Online</option>
+    <option value="busy">Busy</option>
+    <option value="offline">Offline</option>
+  </select>
+  <button type="button" class="btn btn-outline btn-sm !px-2" title="Reload" aria-label="Reload" (click)="phone.refreshLiveAgents()">
+    <app-icon name="refresh-cw" [size]="14" />
+  </button>
+</div>
+
+<div class="max-h-72 overflow-y-auto rounded-md border">
+  @if (paginated().length === 0) {
+    <div class="text-muted-foreground flex flex-col items-center gap-1.5 py-8 text-center text-sm">
+      <app-icon name="users" [size]="20" class="opacity-50" />
+      No extensions found
+    </div>
+  } @else {
+    @for (contact of paginated(); track contact.extension) {
+      <div class="flex items-center gap-2 border-b px-2.5 py-2 text-sm last:border-0">
+        <span
+          class="size-2 shrink-0 rounded-full"
+          [class]="
+            tone(contact.status, contact.onCall) === 'online'
+              ? 'bg-emerald-500'
+              : tone(contact.status, contact.onCall) === 'busy'
+                ? 'bg-amber-500'
+                : 'bg-zinc-300 dark:bg-zinc-600'
+          "
+        ></span>
+        <div class="min-w-0 flex-1">
+          <p class="truncate font-medium">{{ contact.extension }}</p>
+          <p class="text-muted-foreground truncate text-xs">{{ tone(contact.status, contact.onCall) }}</p>
+        </div>
+        <button
+          type="button"
+          class="hover:bg-accent shrink-0 rounded p-1.5 text-emerald-600 disabled:opacity-40"
+          title="Call"
+          aria-label="Call"
+          [disabled]="!canDial()"
+          (click)="call(contact.extension)"
+        >
+          <app-icon name="phone-call" [size]="14" />
+        </button>
+      </div>
+    }
+  }
+</div>
+
+<app-pager class="mt-2 block" [(page)]="page" [(pageSize)]="pageSize" [total]="filtered().length" />

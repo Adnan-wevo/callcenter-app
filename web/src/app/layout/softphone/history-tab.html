@@ -1,0 +1,48 @@
+<div class="mb-2 flex items-center gap-1.5">
+  <input
+    type="search"
+    class="input h-8 min-w-0 flex-1 text-sm"
+    placeholder="Search caller… (this page)"
+    aria-label="Search call history"
+    [value]="search()"
+    (input)="search.set($any($event.target).value)"
+  />
+  <select class="input h-8 w-auto text-sm" aria-label="Filter by status" [value]="statusFilter()" (change)="statusFilter.set($any($event.target).value)">
+    <option value="">All</option>
+    <option value="answered">Answered</option>
+    <option value="completed">Completed</option>
+    <option value="missed">Missed</option>
+    <option value="abandoned">Abandoned</option>
+    <option value="ongoing">Ongoing</option>
+  </select>
+</div>
+
+<div class="max-h-72 overflow-y-auto rounded-md border">
+  @if (filtered().length === 0) {
+    <div class="text-muted-foreground flex flex-col items-center gap-1.5 py-8 text-center text-sm">
+      <app-icon name="clock" [size]="20" class="opacity-50" />
+      No call history
+    </div>
+  } @else {
+    @for (row of filtered(); track row.id) {
+      <div class="flex items-center gap-2 border-b px-2.5 py-2 text-sm last:border-0">
+        <span
+          class="text-muted-foreground shrink-0 text-xs"
+          [title]="row.direction"
+        >{{ row.direction === 'outbound' ? '↑' : '↓' }}</span>
+        <div class="min-w-0 flex-1">
+          <p class="truncate font-medium">{{ row.caller_name || row.caller_id || 'Unknown' }}</p>
+          <p class="text-muted-foreground truncate text-xs">
+            {{ duration(row.talk_seconds) }} · {{ time(row.started_at) }}
+            @if (row.queue) {
+              · {{ row.queue }}
+            }
+          </p>
+        </div>
+        <span class="badge badge-secondary shrink-0">{{ row.status }}</span>
+      </div>
+    }
+  }
+</div>
+
+<app-pager class="mt-2 block" [(page)]="page" [(pageSize)]="pageSize" [total]="total()" />

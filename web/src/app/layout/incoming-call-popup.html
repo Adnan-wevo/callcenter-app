@@ -1,0 +1,36 @@
+@if (phone.incomingCall(); as call) {
+  <div class="fixed inset-0 z-50 flex items-start justify-center pt-24 sm:items-center sm:pt-0">
+    <div class="card w-[22rem] max-w-[calc(100vw-2rem)] p-6 text-center shadow-lg">
+      <div
+        class="relative mx-auto flex size-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600"
+      >
+        <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500/40"></span>
+        <app-icon name="phone-call" [size]="28" class="relative" />
+      </div>
+
+      <p class="text-muted-foreground mt-4 text-xs font-semibold tracking-widest uppercase">
+        Incoming call
+      </p>
+      <p class="mt-1 truncate text-2xl font-bold">{{ label(call) }}</p>
+
+      @if (queue(call); as q) {
+        <span class="badge badge-secondary mt-2 inline-flex">Queue {{ q }}</span>
+      }
+
+      <div class="mt-6 flex gap-3">
+        <button type="button" class="btn btn-outline flex-1" (click)="decline(call)">
+          <app-icon name="phone-off" [size]="18" />
+          Decline
+        </button>
+        <button
+          type="button"
+          class="btn btn-default flex-1 gap-2 !bg-emerald-600 hover:!bg-emerald-700"
+          (click)="answer(call)"
+        >
+          <app-icon name="phone-call" [size]="18" />
+          Answer
+        </button>
+      </div>
+    </div>
+  </div>
+}

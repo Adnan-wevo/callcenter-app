@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   ElementRef,
   computed,
   effect,
@@ -13,6 +12,13 @@ import {
 import { CallSession } from '../engines/sip/domain/sip-engine';
 import { SoftphoneService } from '../core/softphone/softphone.service';
 import { IconComponent } from '../shared/components/icon/icon';
+import { ContactsTabComponent } from './softphone/contacts-tab';
+import { HistoryTabComponent } from './softphone/history-tab';
+import { LogsTabComponent } from './softphone/logs-tab';
+import { QueueTabComponent } from './softphone/queue-tab';
+import { SupervisorPanelComponent } from './softphone/supervisor-panel';
+
+type SoftphoneTab = 'queue' | 'contacts' | 'history' | 'logs';
 
 const DIALPAD_KEYS = [
   ['1', ''], ['2', 'ABC'], ['3', 'DEF'],
@@ -41,15 +47,25 @@ const DIALPAD_KEYS = [
  * # What this does NOT do
  *
  * It drives whichever `SipEngine` `SoftphoneService` has selected — the real
- * one or `FakeSipEngine` — and knows nothing about which. Attended transfer,
- * conference and supervisor spy/whisper/barge are not here yet; see
- * `SipEngine`'s own doc comment for what is deliberately unimplemented and
- * why.
+ * one or `FakeSipEngine` — and knows nothing about which. Attended transfer
+ * and conference are not here yet; see `SipEngine`'s own doc comment for
+ * what is deliberately unimplemented and why. Supervisor monitor/whisper/
+ * barge IS here (`app-supervisor-panel`, below) — it needs no engine
+ * support of its own, since the PBX originates the resulting audio leg back
+ * to the supervisor's own extension as an ordinary incoming call; the
+ * engine never knows it's a spy session rather than a real one.
  */
 @Component({
   selector: 'app-softphone-panel',
   standalone: true,
-  imports: [IconComponent],
+  imports: [
+    IconComponent,
+    SupervisorPanelComponent,
+    QueueTabComponent,
+    ContactsTabComponent,
+    HistoryTabComponent,
+    LogsTabComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './softphone-panel.html',
 })
@@ -63,55 +79,28 @@ export class SoftphonePanelComponent {
 
   protected readonly dialInput = signal('');
   protected readonly showKeypadDuringCall = signal(false);
+  protected readonly activeTab = signal<SoftphoneTab>('queue');
+
+  protected readonly historyCount = computed(() => this.phone.historyMeta()?.total ?? 0);
+
+  protected readonly callStateLabel = computed(() => {
+    const call = this.phone.primaryCall();
+    if (!call) {
+      return 'IDLE';
+    }
+    return call.state === 'progress' ? 'CALLING' : 'IN CALL';
+  });
+
+  protected readonly tabs = computed(() => [
+    { id: 'queue' as const, label: 'Queue', count: this.phone.queueWaitingCalls().length },
+    { id: 'contacts' as const, label: 'Contacts', count: this.phone.contacts().length },
+    { id: 'history' as const, label: 'History', count: this.historyCount() },
+    { id: 'logs' as const, label: 'Logs', count: this.phone.logs().length },
+  ]);
 
   private readonly audioEl = viewChild<ElementRef<HTMLAudioElement>>('remoteAudio');
 
-  /**
-   * The call the panel treats as "the" call for the single-call controls
-   * (mute/hold/hangup): the most recently changed active call. Concurrent
-   * calls beyond this one (call waiting) are listed but not the primary
-   * focus — multi-call juggling is out of scope for this first version.
-   */
-  protected readonly primaryCall = computed<CallSession | undefined>(() => {
-    const calls = this.phone.activeCalls();
-    return calls[calls.length - 1];
-  });
-
-  // A local timer tick, the same pattern app.ts's clock uses: a signal ticked
-  // by an interval rather than a pipe, so in-call duration updates without a
-  // change-detection pass over the whole tree. Only runs while a call is
-  // actually answered — a collapsed, idle panel should not be doing anything
-  // every second.
-  private readonly now = signal(Date.now());
-
-  protected readonly elapsed = computed(() => {
-    const call = this.primaryCall();
-    if (!call?.answeredAt) {
-      return null;
-    }
-    const seconds = Math.max(0, Math.floor((this.now() - call.answeredAt.getTime()) / 1000));
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  });
-
   constructor() {
-    let tick: ReturnType<typeof setInterval> | null = null;
-    effect(() => {
-      const answered = this.primaryCall()?.answeredAt != null;
-      if (answered && !tick) {
-        tick = setInterval(() => this.now.set(Date.now()), 1000);
-      } else if (!answered && tick) {
-        clearInterval(tick);
-        tick = null;
-      }
-    });
-    inject(DestroyRef).onDestroy(() => {
-      if (tick) {
-        clearInterval(tick);
-      }
-    });
-
     // Attach the remote party's audio as soon as both the <audio> element and
     // a stream exist. An effect rather than a template binding, because
     // `srcObject` is not an attribute React/Angular can bind declaratively —
@@ -130,8 +119,9 @@ export class SoftphonePanelComponent {
   }
 
   protected pressDigit(digit: string): void {
-    if (this.primaryCall() && this.showKeypadDuringCall()) {
-      this.phone.sendDtmf(this.primaryCall()!.id, digit as never);
+    const call = this.phone.primaryCall();
+    if (call && this.showKeypadDuringCall()) {
+      this.phone.sendDtmf(call.id, digit as never);
       return;
     }
     this.dialInput.update((v) => v + digit);

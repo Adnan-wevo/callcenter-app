@@ -23,6 +23,23 @@ import {
 type JsSipRTCSession = any;
 
 /**
+ * No ICE server was configured anywhere in this codebase before — confirmed
+ * by search, and the reason a WebRTC call would connect (SDP/SIP signalling
+ * succeeds) and then die on its own a few dozen seconds later: without a
+ * STUN server, a browser behind NAT can only gather a `host` ICE candidate,
+ * which the PBX on the public internet usually cannot reach. JsSIP's own
+ * RTCSession wires `iceconnectionstatechange` to auto-`terminate()` the
+ * call the moment `iceConnectionState` becomes `'failed'` — which is
+ * exactly "the call dies by itself", not a crash anywhere in this app's own
+ * code. A public STUN server fixes the common case (NAT with a normal,
+ * non-symmetric mapping); a fully locked-down network still needs a TURN
+ * relay, which this does not attempt to provide.
+ */
+const ICE_SERVERS: RTCIceServer[] = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+];
+
+/**
  * The real engine: a SIP user agent in the browser, registered to Asterisk
  * over a secure WebSocket, with WebRTC carrying the audio.
  *
@@ -129,6 +146,7 @@ export class JsSipEngine implements SipEngine {
       // A call with no inbound audio is a call the agent cannot hear. Asking
       // for it explicitly beats relying on the far end to offer it.
       rtcOfferConstraints: { offerToReceiveAudio: true, offerToReceiveVideo: false },
+      pcConfig: { iceServers: ICE_SERVERS },
     });
 
     this.rtc.set(id, rtc);
@@ -139,7 +157,10 @@ export class JsSipEngine implements SipEngine {
   }
 
   async answerCall(callId: CallId): Promise<void> {
-    this.rtc.get(callId)?.answer({ mediaConstraints: { audio: true, video: false } });
+    this.rtc.get(callId)?.answer({
+      mediaConstraints: { audio: true, video: false },
+      pcConfig: { iceServers: ICE_SERVERS },
+    });
   }
 
   async rejectCall(callId: CallId, reason?: CallRejectReason): Promise<void> {
@@ -254,12 +275,43 @@ export class JsSipEngine implements SipEngine {
     // The remote audio arrives on a track event; the page attaches it to an
     // <audio> element. Handing over the stream rather than playing it here
     // keeps this engine free of DOM.
-    rtc.connection?.addEventListener?.('track', (event: RTCTrackEvent) => {
-      const [remoteStream] = event.streams;
-      if (remoteStream) {
-        this.media$.next({ callId: id, remoteStream });
-      }
-    });
+    //
+    // WHEN the underlying RTCPeerConnection exists differs by direction, and
+    // that used to break inbound audio entirely:
+    //   - Outbound: ua.call() -> RTCSession.connect() creates it
+    //     SYNCHRONOUSLY, before this bind() call even runs. `rtc.connection`
+    //     already exists here.
+    //   - Inbound: JsSIP only creates it inside answer() (RTCSession's
+    //     _createRTCConnection, called from init_incoming's answer path),
+    //     which runs much later — once the agent actually clicks Answer.
+    //     `rtc.connection` is `undefined` at bind() time.
+    // The old code read `rtc.connection?.addEventListener?.(...)` once,
+    // here — correct for outbound (connection already exists), silently a
+    // no-op for inbound (nothing to attach to yet, and nothing ever
+    // retried), so no 'track' listener was EVER attached for an inbound
+    // call and remote audio never arrived. JsSIP's own 'peerconnection'
+    // event fires the instant the connection is created, for both
+    // directions — but subscribing to it unconditionally reintroduces the
+    // same bug in the other direction, because for outbound that event has
+    // already fired (synchronously, above) by the time we get here, and an
+    // event fired before a listener subscribes is simply missed. Covering
+    // both requires both: attach immediately if the connection already
+    // exists, otherwise wait for it to be created.
+    const attachTrackListener = (peerconnection: RTCPeerConnection) => {
+      peerconnection.addEventListener('track', (event: RTCTrackEvent) => {
+        const [remoteStream] = event.streams;
+        if (remoteStream) {
+          this.media$.next({ callId: id, remoteStream });
+        }
+      });
+    };
+    if (rtc.connection) {
+      attachTrackListener(rtc.connection);
+    } else {
+      rtc.on('peerconnection', ({ peerconnection }: { peerconnection: RTCPeerConnection }) =>
+        attachTrackListener(peerconnection),
+      );
+    }
   }
 
   private forget(id: CallId): void {

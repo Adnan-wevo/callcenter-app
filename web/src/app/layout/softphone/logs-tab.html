@@ -1,0 +1,48 @@
+<div class="mb-2 flex items-center gap-1.5">
+  <input
+    type="search"
+    class="input h-8 min-w-0 flex-1 text-sm"
+    placeholder="Search log…"
+    aria-label="Search diagnostic log"
+    [value]="search()"
+    (input)="search.set($any($event.target).value); page.set(1)"
+  />
+  <select class="input h-8 w-auto text-sm" aria-label="Filter by level" [value]="levelFilter()" (change)="levelFilter.set($any($event.target).value); page.set(1)">
+    <option value="">All levels</option>
+    <option value="info">Info</option>
+    <option value="warn">Warning</option>
+    <option value="error">Error</option>
+  </select>
+  <button type="button" class="btn btn-outline btn-sm !px-2" title="Clear" aria-label="Clear log" (click)="phone.clearLogs()">
+    <app-icon name="delete" [size]="14" />
+  </button>
+</div>
+
+<div class="max-h-72 overflow-y-auto rounded-md border font-mono">
+  @if (paginated().length === 0) {
+    <div class="text-muted-foreground flex flex-col items-center gap-1.5 py-8 text-center text-sm font-sans">
+      <app-icon name="info" [size]="20" class="opacity-50" />
+      Nothing logged yet
+    </div>
+  } @else {
+    @for (entry of paginated(); track entry.id) {
+      <div class="flex items-start gap-2 border-b px-2.5 py-1.5 text-xs last:border-0">
+        <span class="text-muted-foreground shrink-0">{{ time(entry.at) }}</span>
+        <span
+          class="shrink-0 font-semibold uppercase"
+          [class]="
+            entry.level === 'error'
+              ? 'text-destructive'
+              : entry.level === 'warn'
+                ? 'text-amber-600'
+                : 'text-muted-foreground'
+          "
+          >{{ entry.level }}</span
+        >
+        <span class="min-w-0 flex-1 break-words">{{ entry.message }}</span>
+      </div>
+    }
+  }
+</div>
+
+<app-pager class="mt-2 block" [(page)]="page" [(pageSize)]="pageSize" [total]="filtered().length" />

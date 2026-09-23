@@ -63,6 +63,7 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 			// original: any signed-in agent may record their own calls,
 			// there is no separate permission for it there either.
 			sp.POST("/call-logs", h.CreateCallLog)
+			sp.GET("/call-logs/mine", h.ListMyCallLogs)
 			sp.POST("/call-logs/:id/answered", h.MarkCallAnswered)
 			sp.POST("/call-logs/:id/finalize", h.FinalizeCallLog)
 			sp.POST("/detect-queue", h.DetectQueue)

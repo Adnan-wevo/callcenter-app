@@ -21,6 +21,7 @@ services:
       - ./migrations/qstats/001_init.sql:/docker-entrypoint-initdb.d/01_qstats_init.sql:ro
       - ./migrations/callcenter/001_init.sql:/docker-entrypoint-initdb.d/02_callcenter_init.sql:ro
       - ./migrations/callcenter/002_sip_extensions.sql:/docker-entrypoint-initdb.d/03_sip_extensions_init.sql:ro
+      - ./migrations/callcenter/003_call_logs_extension_index.sql:/docker-entrypoint-initdb.d/04_call_logs_extension_index.sql:ro
       - qstats-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]

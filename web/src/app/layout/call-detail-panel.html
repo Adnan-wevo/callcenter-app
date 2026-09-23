@@ -1,0 +1,80 @@
+@if (phone.answeredCall(); as call) {
+  <!-- A FIXED overlay, not a flex sibling that reserves layout width — the
+       sidebar (256px) + softphone panel (320px) already claim a lot of a
+       normal 1366-1440px laptop screen; adding a third permanent 280px
+       column left the dashboard's own content squeezed into ~500px,
+       which is the real explanation for "dashboard tak keluar lepas buat
+       call": nothing crashed, the page was just crushed. Floating over the
+       content instead of pushing it costs nothing at any viewport width. -->
+  <aside
+    class="bg-card fixed top-[4.5rem] right-4 z-40 flex max-h-[calc(100vh-6rem)] w-[280px] flex-col overflow-y-auto rounded-lg border shadow-lg"
+  >
+    <div class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+      <app-icon name="phone-call" [size]="16" class="text-brand" />
+      <span class="text-xs font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+        Call Details
+      </span>
+    </div>
+
+    <div class="flex flex-col items-center gap-1 p-5 text-center">
+      <div
+        class="bg-brand/10 text-brand flex size-16 items-center justify-center rounded-full text-xl font-semibold"
+      >
+        {{ initials() }}
+      </div>
+      <p class="mt-2 truncate text-lg font-bold">{{ label(call) }}</p>
+      @if (call.displayName?.trim()) {
+        <p class="text-muted-foreground font-mono text-sm">{{ call.remote }}</p>
+      }
+
+      <p class="mt-3 font-mono text-2xl font-semibold tabular-nums">
+        {{ phone.elapsed() || '0:00' }}
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-2 px-4 pb-5">
+      <div class="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+        <span class="text-muted-foreground flex items-center gap-1.5">
+          <app-icon [name]="call.direction === 'inbound' ? 'phone-call' : 'forward'" [size]="14" />
+          Direction
+        </span>
+        <span class="font-medium capitalize">{{ call.direction }}</span>
+      </div>
+
+      <div class="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+        <span class="text-muted-foreground flex items-center gap-1.5">
+          <app-icon name="user" [size]="14" />
+          My extension
+        </span>
+        <span class="font-mono font-medium">{{ phone.bootstrap()?.extension || '—' }}</span>
+      </div>
+
+      @if (phone.primaryCallQueue(); as queue) {
+        <div class="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+          <span class="text-muted-foreground flex items-center gap-1.5">
+            <app-icon name="grid" [size]="14" />
+            Queue
+          </span>
+          <span class="font-mono font-medium">{{ queue }}</span>
+        </div>
+      }
+
+      @if (call.muted || call.onHold) {
+        <div class="mt-1 flex flex-wrap gap-1.5">
+          @if (call.muted) {
+            <span class="badge badge-secondary">
+              <app-icon name="mic-off" [size]="11" class="mr-1" />
+              Muted
+            </span>
+          }
+          @if (call.onHold) {
+            <span class="badge badge-secondary">
+              <app-icon name="pause" [size]="11" class="mr-1" />
+              On hold
+            </span>
+          }
+        </div>
+      }
+    </div>
+  </aside>
+}

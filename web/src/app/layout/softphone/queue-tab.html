@@ -1,0 +1,106 @@
+<div class="card mb-2.5 p-2.5">
+  <div class="flex items-center justify-between">
+    <span class="text-xs font-semibold">Queue Management</span>
+    <span
+      class="badge"
+      [class]="
+        phone.queuePaused()
+          ? 'bg-amber-500/10 text-amber-600'
+          : phone.queueLoggedIn()
+            ? 'bg-emerald-500/10 text-emerald-600'
+            : 'badge-secondary'
+      "
+    >
+      {{ phone.queuePaused() ? 'Paused' : phone.queueLoggedIn() ? 'Logged In' : 'Logged Out' }}
+    </span>
+  </div>
+
+  <div class="mt-2 flex items-center gap-1.5">
+    <input
+      type="text"
+      class="input h-8 min-w-0 flex-1 text-sm"
+      placeholder="50000|50001"
+      aria-label="Queue numbers"
+      [value]="queueInput()"
+      (input)="queueInput.set($any($event.target).value)"
+    />
+    @if (!phone.queueLoggedIn()) {
+      <button type="button" class="btn btn-sm !bg-emerald-600 text-white hover:opacity-90" [disabled]="phone.queueBusy()" (click)="login()">
+        {{ phone.queueBusy() ? '…' : 'Log In' }}
+      </button>
+    } @else {
+      <button type="button" class="btn btn-outline btn-sm !border-destructive !text-destructive" [disabled]="phone.queueBusy()" (click)="logout()">
+        {{ phone.queueBusy() ? '…' : 'Log Out' }}
+      </button>
+      <button type="button" class="btn btn-outline btn-sm !border-amber-500 !text-amber-600" [disabled]="phone.queueBusy()" (click)="togglePause()">
+        {{ phone.queuePaused() ? 'Resume' : 'Pause' }}
+      </button>
+    }
+  </div>
+
+  @if (phone.queueError(); as err) {
+    <p class="text-destructive mt-1.5 text-xs">{{ err }}</p>
+  }
+</div>
+
+<div class="mb-2 flex items-center gap-1.5">
+  <input
+    type="search"
+    class="input h-8 min-w-0 flex-1 text-sm"
+    placeholder="Search caller…"
+    aria-label="Search waiting callers"
+    [value]="search()"
+    (input)="search.set($any($event.target).value); page.set(1)"
+  />
+  <select class="input h-8 w-auto text-sm" aria-label="Filter by queue" [value]="queueFilter()" (change)="queueFilter.set($any($event.target).value); page.set(1)">
+    <option value="">All Queues</option>
+    @for (name of phone.queueNames(); track name) {
+      <option [value]="name">{{ name }}</option>
+    }
+  </select>
+  <button type="button" class="btn btn-outline btn-sm !px-2" title="Reload" aria-label="Reload" (click)="refresh()">
+    <app-icon name="refresh-cw" [size]="14" />
+  </button>
+</div>
+
+<div class="max-h-64 overflow-y-auto rounded-md border">
+  @if (paginated().length === 0) {
+    <div class="text-muted-foreground flex flex-col items-center gap-1.5 py-8 text-center text-sm">
+      <app-icon name="phone-missed" [size]="20" class="opacity-50" />
+      No calls waiting
+    </div>
+  } @else {
+    @for (call of paginated(); track call.unique_id) {
+      <div class="flex items-center gap-2 border-b px-2.5 py-2 text-sm last:border-0">
+        <span class="text-muted-foreground w-4 shrink-0 text-center text-xs">{{ call.position }}</span>
+        <div class="min-w-0 flex-1">
+          <p class="truncate font-medium">{{ call.caller_id || 'Unknown' }}</p>
+          <p class="text-muted-foreground truncate text-xs">{{ call.queue }} · {{ wait(call.wait_seconds) }}</p>
+        </div>
+        @if (phone.bootstrap()?.is_supervisor) {
+          <button type="button" class="hover:bg-accent shrink-0 rounded p-1.5 text-emerald-600" title="Pick up" aria-label="Pick up" (click)="pickUp(call.channel)">
+            <app-icon name="phone-call" [size]="14" />
+          </button>
+          <button type="button" class="hover:bg-accent shrink-0 rounded p-1.5" title="Redirect" aria-label="Redirect" (click)="startRedirect(call.channel)">
+            <app-icon name="forward" [size]="14" />
+          </button>
+        }
+      </div>
+      @if (redirectingChannel() === call.channel) {
+        <div class="flex items-center gap-1.5 border-b px-2.5 py-1.5 last:border-0">
+          <input
+            type="text"
+            class="input h-7 min-w-0 flex-1 text-xs"
+            placeholder="Extension to redirect to…"
+            [value]="redirectTarget()"
+            (input)="redirectTarget.set($any($event.target).value)"
+            (keydown.enter)="sendRedirect(call.channel)"
+          />
+          <button type="button" class="btn btn-sm !h-7 !px-2 text-xs" (click)="sendRedirect(call.channel)">Send</button>
+        </div>
+      }
+    }
+  }
+</div>
+
+<app-pager class="mt-2 block" [(page)]="page" [(pageSize)]="pageSize" [total]="filtered().length" />

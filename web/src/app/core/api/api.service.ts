@@ -69,11 +69,13 @@ export class ApiService {
     );
   }
 
-  post<T>(path: string, body?: unknown): Observable<T> {
-    return this.http.post<ApiEnvelope<T>>(this.url(path), body ?? {}).pipe(
-      map((envelope) => envelope.data),
-      catchError(translate),
-    );
+  post<T>(path: string, body?: unknown, opts?: { silent?: boolean }): Observable<T> {
+    return this.http
+      .post<ApiEnvelope<T>>(this.url(path), body ?? {}, { context: contextFor(opts) })
+      .pipe(
+        map((envelope) => envelope.data),
+        catchError(translate),
+      );
   }
 
   private url(path: string): string {

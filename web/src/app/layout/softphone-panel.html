@@ -22,7 +22,7 @@
       ></span>
     </button>
 
-    @if (primaryCall(); as call) {
+    @if (phone.primaryCall(); as call) {
       <div
         class="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600"
         [title]="label(call)"
@@ -116,47 +116,35 @@
           <!-- registered / unregistered: the working states. -->
 
           @if (phone.bootstrap(); as b) {
-            <div class="mb-3 flex items-center gap-2 rounded-lg border px-3 py-2">
+            <div class="mb-3 flex flex-wrap items-center gap-1.5 rounded-lg border px-3 py-2">
               <span
                 class="size-2 shrink-0 rounded-full"
                 [class]="phone.isConnected() ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-600'"
               ></span>
-              <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ b.display_name }}</span>
-              <span class="text-muted-foreground shrink-0 font-mono text-xs">{{ b.extension }}</span>
+              <span class="min-w-0 flex-1 truncate text-sm font-medium">
+                {{ phone.isConnected() ? 'Registered' : 'Connecting' }} ({{ b.extension }})
+              </span>
+              <span class="badge badge-secondary shrink-0">{{ callStateLabel() }}</span>
+              <button
+                type="button"
+                class="hover:bg-accent shrink-0 rounded p-1 text-zinc-400 transition-colors hover:text-zinc-600 dark:hover:text-zinc-300"
+                title="Diagnostic log"
+                aria-label="Diagnostic log"
+                (click)="activeTab.set('logs')"
+              >
+                <app-icon name="sliders" [size]="14" />
+              </button>
             </div>
           }
 
-          @if (phone.incomingCall(); as ringing) {
-            <!-- Ringing card: the one state that pre-empts everything else in
-                 the panel, so an incoming call is never missed behind a
-                 half-dialled number. -->
-            <div class="card mb-3 flex flex-col items-center gap-3 p-5 text-center">
-              <div class="relative flex size-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
-                <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500/40"></span>
-                <app-icon name="phone-call" [size]="24" class="relative" />
-              </div>
-              <div>
-                <p class="font-semibold">{{ label(ringing) }}</p>
-                <p class="text-muted-foreground text-xs">Incoming call…</p>
-              </div>
-              <div class="flex w-full gap-2">
-                <button type="button" class="btn btn-outline flex-1" (click)="decline(ringing)">
-                  <app-icon name="phone-off" [size]="16" />
-                  Decline
-                </button>
-                <button
-                  type="button"
-                  class="flex-1 gap-2 !bg-emerald-600 hover:!bg-emerald-700 btn btn-default"
-                  (click)="answer(ringing)"
-                >
-                  <app-icon name="phone-call" [size]="16" />
-                  Answer
-                </button>
-              </div>
-            </div>
-          }
+          <!-- Ringing is handled by the global app-incoming-call-popup
+               (mounted at app.html's root) instead of a card here — that
+               popup renders regardless of whether this panel is open or
+               collapsed, which a card confined to this branch never could.
+               Duplicating an Answer/Decline prompt in both places would
+               just be two competing prompts for the same call. -->
 
-          @if (primaryCall(); as call) {
+          @if (phone.primaryCall(); as call) {
             <!-- The active call card. -->
             <div class="card mb-3 flex flex-col items-center gap-2 p-4 text-center">
               <div class="bg-brand/10 text-brand flex size-11 items-center justify-center rounded-full">
@@ -169,7 +157,7 @@
                     Calling…
                   } @else if (call.state === 'held') {
                     On hold
-                  } @else if (elapsed(); as e) {
+                  } @else if (phone.elapsed(); as e) {
                     {{ e }}
                   } @else {
                     Connecting…
@@ -219,10 +207,10 @@
             </div>
           }
 
-          @if (!primaryCall() || showKeypadDuringCall()) {
+          @if (!phone.primaryCall() || showKeypadDuringCall()) {
             <!-- The dialpad. Doubles as a DTMF pad mid-call when the caller
                  opened the keypad above — pressDigit() branches on that. -->
-            @if (!primaryCall()) {
+            @if (!phone.primaryCall()) {
               <div class="relative mb-3">
                 <input
                   type="text"
@@ -261,7 +249,7 @@
               }
             </div>
 
-            @if (!primaryCall()) {
+            @if (!phone.primaryCall()) {
               <button
                 type="button"
                 class="btn btn-default mt-3 w-full gap-2"
@@ -273,6 +261,48 @@
               </button>
             }
           }
+
+          <app-supervisor-panel />
+
+          <!-- Queue / Contacts / History / Logs — the rest of the panel,
+               always available once registered so an agent can see who's
+               waiting or dial a coworker without a call in progress. -->
+          <div class="mt-3 flex border-b text-xs font-medium">
+            @for (tab of tabs(); track tab.id) {
+              <button
+                type="button"
+                class="-mb-px flex items-center gap-1 border-b-2 px-2.5 py-2 transition-colors"
+                [class]="
+                  activeTab() === tab.id
+                    ? 'border-brand text-brand'
+                    : 'text-muted-foreground hover:text-foreground border-transparent'
+                "
+                (click)="activeTab.set(tab.id)"
+              >
+                {{ tab.label }}
+                @if (tab.count > 0) {
+                  <span class="badge badge-secondary !px-1.5 !py-0 text-[0.65rem]">{{ tab.count }}</span>
+                }
+              </button>
+            }
+          </div>
+
+          <div class="pt-3">
+            @switch (activeTab()) {
+              @case ('queue') {
+                <app-queue-tab />
+              }
+              @case ('contacts') {
+                <app-contacts-tab />
+              }
+              @case ('history') {
+                <app-history-tab />
+              }
+              @case ('logs') {
+                <app-logs-tab />
+              }
+            }
+          </div>
         }
       }
     </div>

@@ -22,6 +22,7 @@ export const PERMISSIONS = [
   'call-center.call-search.export',
   'call-center.agent-performance.index',
   'call-center.distribution.index',
+  'softphone.supervise',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

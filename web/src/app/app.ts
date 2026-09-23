@@ -13,9 +13,12 @@ import { filter, map, startWith } from 'rxjs';
 
 import { AuthService } from './core/auth/auth.service';
 import { PermissionStore } from './core/authz/permission.store';
+import { sharedAudioContext } from './core/softphone/ringtone';
 import { SoftphoneService } from './core/softphone/softphone.service';
 import { CALLCENTER_BRAND, CALLCENTER_NAV } from './layout/callcenter-nav';
 import { SidebarComponent } from './layout/callcenter-sidebar';
+import { CallDetailPanelComponent } from './layout/call-detail-panel';
+import { IncomingCallPopupComponent } from './layout/incoming-call-popup';
 import { SoftphonePanelComponent } from './layout/softphone-panel';
 import { IconComponent } from './shared/components/icon/icon';
 import { NotificationService } from './shared/services/notification.service';
@@ -23,7 +26,14 @@ import { NotificationService } from './shared/services/notification.service';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, SidebarComponent, SoftphonePanelComponent, IconComponent],
+  imports: [
+    RouterOutlet,
+    SidebarComponent,
+    SoftphonePanelComponent,
+    IncomingCallPopupComponent,
+    CallDetailPanelComponent,
+    IconComponent,
+  ],
   templateUrl: './app.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -103,6 +113,15 @@ export class App {
   constructor() {
     const tick = setInterval(() => this.now.set(new Date()), 1000);
     inject(DestroyRef).onDestroy(() => clearInterval(tick));
+
+    // Browsers refuse to start audio before a user gesture has touched the
+    // page. An incoming call is a SERVER-initiated event — there is no
+    // gesture right before it — so the ringtone's AudioContext has to be
+    // primed early instead, on whatever the agent's first click/tap turns
+    // out to be. `{ once: true }` — this only ever needs to run once.
+    const unlock = () => void sharedAudioContext().resume();
+    document.addEventListener('pointerdown', unlock, { once: true, capture: true });
+    inject(DestroyRef).onDestroy(() => document.removeEventListener('pointerdown', unlock, true));
 
     // Non-blocking bootstrap: whenever there is a valid session, make sure
     // authority is loaded. An effect rather than a blocking initializer, so

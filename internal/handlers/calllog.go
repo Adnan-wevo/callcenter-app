@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"database/sql"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -117,6 +119,97 @@ func (h *Handlers) FinalizeCallLog(c *gin.Context) {
 		return
 	}
 	apires.Item(c, http.StatusOK, gin.H{"status": "finalized"})
+}
+
+// callLogEntry is the JSON shape of one History-tab row — a flattened,
+// null-free view of calllog.CallLog, since the DB row's sql.NullString/
+// sql.NullTime fields would otherwise serialise as {"String":"x","Valid":true}.
+type callLogEntry struct {
+	ID           string  `json:"id"`
+	Direction    string  `json:"direction"`
+	Status       string  `json:"status"`
+	CallerID     string  `json:"caller_id"`
+	CallerName   string  `json:"caller_name"`
+	Destination  string  `json:"destination"`
+	Queue        string  `json:"queue"`
+	WaitSeconds  int     `json:"wait_seconds"`
+	TalkSeconds  int     `json:"talk_seconds"`
+	StartedAt    *string `json:"started_at"`
+	AnsweredAt   *string `json:"answered_at"`
+	EndedAt      *string `json:"ended_at"`
+	HasRecording bool    `json:"has_recording"`
+}
+
+func toCallLogEntry(row calllog.CallLog) callLogEntry {
+	return callLogEntry{
+		ID:           row.ID,
+		Direction:    row.Direction,
+		Status:       row.Status,
+		CallerID:     row.CallerID.String,
+		CallerName:   row.CallerName.String,
+		Destination:  row.Destination.String,
+		Queue:        row.Queue.String,
+		WaitSeconds:  row.WaitSeconds,
+		TalkSeconds:  row.TalkSeconds,
+		StartedAt:    nullTimeString(row.StartedAt),
+		AnsweredAt:   nullTimeString(row.AnsweredAt),
+		EndedAt:      nullTimeString(row.EndedAt),
+		HasRecording: row.HasRecording(),
+	}
+}
+
+func nullTimeString(t sql.NullTime) *string {
+	if !t.Valid {
+		return nil
+	}
+	s := t.Time.Format(time.RFC3339)
+	return &s
+}
+
+// GET /api/v1/secure/softphone/call-logs/mine
+//
+// The softphone panel's own "History" tab: the CALLER's own past calls,
+// scoped by their extension exactly like queue login/logout/pause are —
+// authentication is the only gate, there is no separate permission for
+// "may see your own call history", and there is deliberately no way to
+// pass another extension's number in.
+func (h *Handlers) ListMyCallLogs(c *gin.Context) {
+	user, ok := middleware.UserFrom(c)
+	if !ok {
+		apires.Error(c, http.StatusUnauthorized, "authentication required", nil)
+		return
+	}
+
+	extension, ok := h.softphone.ExtensionFor(c.Request.Context(), user.ID)
+	if !ok || extension == "" {
+		apires.Error(c, http.StatusNotFound, "no SIP extension is assigned to your account", nil)
+		return
+	}
+
+	page := queryInt(c, "page", 1)
+	perPage := queryInt(c, "per_page", 25)
+	if perPage > 200 {
+		perPage = 200
+	}
+
+	rows, total, err := h.callLogs.ListForExtension(c.Request.Context(), extension, page, perPage)
+	if err != nil {
+		apires.Error(c, http.StatusInternalServerError, "could not load your call history", nil)
+		return
+	}
+
+	entries := make([]callLogEntry, 0, len(rows))
+	for _, row := range rows {
+		entries = append(entries, toCallLogEntry(row))
+	}
+
+	lastPage := (total + perPage - 1) / perPage
+	if lastPage < 1 {
+		lastPage = 1
+	}
+	apires.Collection(c, http.StatusOK, entries, apires.Meta{
+		Page: page, PerPage: perPage, Total: total, LastPage: lastPage,
+	})
 }
 
 type detectQueueBody struct {

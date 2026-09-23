@@ -381,6 +381,33 @@ func (r *Repository) findWithQueue(ctx context.Context, whereClause string, args
 	return &row, nil
 }
 
+// ListForExtension is the softphone panel's "History" tab: an agent's own
+// past calls, newest first. Pagination is done here in SQL (LIMIT/OFFSET)
+// rather than the paginate-in-memory helper handlers/handlers.go uses for
+// pbx-worker report rows — those come back as a whole window with no
+// pagination of their own; this table is this service's, so the database
+// does the work instead of pulling every row an agent has ever placed into
+// memory to slice it.
+func (r *Repository) ListForExtension(ctx context.Context, extension string, page, perPage int) ([]CallLog, int, error) {
+	var total int
+	if err := r.db.GetContext(ctx, &total,
+		`SELECT COUNT(*) FROM call_logs WHERE extension = ?`, extension); err != nil {
+		return nil, 0, fmt.Errorf("calllog: count for extension %s: %w", extension, err)
+	}
+
+	rows := []CallLog{}
+	if total > 0 {
+		offset := (page - 1) * perPage
+		err := r.db.SelectContext(ctx, &rows,
+			`SELECT * FROM call_logs WHERE extension = ? ORDER BY started_at DESC, created_at DESC LIMIT ? OFFSET ?`,
+			extension, perPage, offset)
+		if err != nil {
+			return nil, 0, fmt.Errorf("calllog: list for extension %s: %w", extension, err)
+		}
+	}
+	return rows, total, nil
+}
+
 // Get fetches one row by id.
 func (r *Repository) Get(ctx context.Context, id string) (*CallLog, error) {
 	var row CallLog

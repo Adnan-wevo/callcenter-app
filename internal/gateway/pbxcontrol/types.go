@@ -82,6 +82,14 @@ type QueueCaller struct {
 	Position    int        `json:"position"`
 	WaitSeconds int        `json:"wait_seconds"`
 	UniqueID    string     `json:"unique_id"`
+	// Channel is the Asterisk channel name (e.g. "SIP/trunk-00000123") —
+	// SnapshotWriter::run()'s own callers[] shape
+	// (wevetel-pbx-worker/src/SnapshotWriter.php) carries it alongside
+	// unique_id specifically because CommandProcessor's pickup/redirect
+	// actions validate against a real channel name, not a uniqueid; a
+	// caller taken from this snapshot for either action needs THIS field,
+	// not UniqueID.
+	Channel string `json:"channel"`
 }
 
 // QueueSnapshot is the data payload of file=queues.
