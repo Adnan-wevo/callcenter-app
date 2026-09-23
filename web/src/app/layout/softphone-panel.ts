@@ -47,13 +47,15 @@ const DIALPAD_KEYS = [
  * # What this does NOT do
  *
  * It drives whichever `SipEngine` `SoftphoneService` has selected — the real
- * one or `FakeSipEngine` — and knows nothing about which. Attended transfer
- * and conference are not here yet; see `SipEngine`'s own doc comment for
- * what is deliberately unimplemented and why. Supervisor monitor/whisper/
- * barge IS here (`app-supervisor-panel`, below) — it needs no engine
- * support of its own, since the PBX originates the resulting audio leg back
- * to the supervisor's own extension as an ordinary incoming call; the
- * engine never knows it's a spy session rather than a real one.
+ * one or `FakeSipEngine` — and knows nothing about which.
+ *
+ * Not everything on screen goes through that engine, though. Conference and
+ * attended transfer run over the PBX instead: a browser cannot mix three
+ * audio streams, and a SIP REFER cannot express "let me speak to them
+ * first". Supervisor monitor/whisper/barge is the same story
+ * (`app-supervisor-panel`, below) — the PBX originates the resulting audio
+ * leg back to the supervisor's own extension as an ordinary incoming call,
+ * so the engine never knows it is a spy session rather than a real one.
  */
 @Component({
   selector: 'app-softphone-panel',
@@ -81,6 +83,8 @@ export class SoftphonePanelComponent {
   protected readonly showKeypadDuringCall = signal(false);
   protected readonly showTransferInput = signal(false);
   protected readonly transferTarget = signal('');
+  protected readonly showConferenceInput = signal(false);
+  protected readonly conferenceTarget = signal('');
   protected readonly activeTab = signal<SoftphoneTab>('queue');
 
   protected readonly historyCount = computed(() => this.phone.historyMeta()?.total ?? 0);
@@ -162,9 +166,8 @@ export class SoftphonePanelComponent {
     this.phone.toggleMute(call);
   }
 
-  /** Blind transfer only (see SoftphoneService.blindTransfer's own doc
-   * comment on why attended isn't offered) — dials the entered extension
-   * and hands the call off immediately, no confirmation leg. */
+  /** Hand the call over immediately, with no confirmation leg — the agent
+   * is out of it as soon as the PBX accepts the REFER. */
   protected transfer(call: CallSession): void {
     const target = this.transferTarget().trim();
     if (!target) {
@@ -173,6 +176,32 @@ export class SoftphonePanelComponent {
     this.phone.blindTransfer(call.id, target);
     this.transferTarget.set('');
     this.showTransferInput.set(false);
+  }
+
+  /** Speak to the target first, with the caller on hold. Runs over the PBX
+   * rather than the SIP engine: a REFER cannot express a consultation. */
+  protected consult(): void {
+    const target = this.transferTarget().trim();
+    if (!target) {
+      return;
+    }
+    this.phone.attendedTransfer(target);
+    this.transferTarget.set('');
+    this.showTransferInput.set(false);
+  }
+
+  protected addToConference(): void {
+    const target = this.conferenceTarget().trim();
+    if (!target) {
+      return;
+    }
+    this.phone.conferenceStart(target);
+    this.conferenceTarget.set('');
+    this.showConferenceInput.set(false);
+  }
+
+  protected toggleConferenceMute(): void {
+    this.phone.conferenceMute(!this.phone.conferenceMuted());
   }
 
   protected retry(): void {

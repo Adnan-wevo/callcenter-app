@@ -166,6 +166,9 @@
                 </p>
               </div>
 
+              <!-- Four that act on the call itself, then the two that
+                   bring somebody else into it. Split across rows because
+                   six buttons do not fit a 320px panel legibly. -->
               <div class="mt-1 flex w-full gap-2">
                 <button
                   type="button"
@@ -198,15 +201,6 @@
                 </button>
                 <button
                   type="button"
-                  class="btn btn-outline flex-1"
-                  [class]="showTransferInput() ? '!bg-accent' : ''"
-                  title="Transfer"
-                  (click)="showTransferInput.set(!showTransferInput())"
-                >
-                  <app-icon name="forward" [size]="16" />
-                </button>
-                <button
-                  type="button"
                   class="btn flex-1 gap-0 !bg-destructive text-white hover:opacity-90"
                   title="Hang up"
                   (click)="hangup(call)"
@@ -215,20 +209,103 @@
                 </button>
               </div>
 
-              @if (showTransferInput()) {
+              <div class="mt-2 flex w-full gap-2">
+                <button
+                  type="button"
+                  class="btn btn-outline flex-1 gap-1.5 text-xs"
+                  [class]="showTransferInput() ? '!bg-accent' : ''"
+                  (click)="showTransferInput.set(!showTransferInput()); showConferenceInput.set(false)"
+                >
+                  <app-icon name="forward" [size]="14" />
+                  Transfer
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-outline flex-1 gap-1.5 text-xs"
+                  [class]="showConferenceInput() ? '!bg-accent' : ''"
+                  (click)="showConferenceInput.set(!showConferenceInput()); showTransferInput.set(false)"
+                >
+                  <app-icon name="users" [size]="14" />
+                  Conference
+                </button>
+              </div>
+
+              @if (phone.consulting()) {
+                <!-- The caller is on hold hearing nothing, so this needs to
+                     be conspicuous and offer the way back. -->
+                <div class="mt-2 w-full rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                  <p class="text-left text-xs">
+                    Speaking privately — the caller is on hold. Hang up to complete the transfer.
+                  </p>
+                  <button type="button" class="btn btn-outline btn-sm mt-2 w-full" (click)="phone.attendedTransferCancel()">
+                    Cancel and take the caller back
+                  </button>
+                </div>
+              }
+
+              @if (phone.inConference()) {
+                <div class="mt-2 w-full rounded-md border px-3 py-2">
+                  <p class="mb-2 text-left text-xs font-semibold">In conference</p>
+                  <div class="flex gap-2">
+                    <button
+                      type="button"
+                      class="btn btn-outline btn-sm flex-1"
+                      [class]="phone.conferenceMuted() ? '!bg-accent' : ''"
+                      (click)="toggleConferenceMute()"
+                    >
+                      {{ phone.conferenceMuted() ? 'Unmute' : 'Mute' }}
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm flex-1" (click)="phone.conferenceLeave()">
+                      Leave
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm flex-1 !bg-destructive text-white hover:opacity-90"
+                      (click)="phone.conferenceEnd()"
+                    >
+                      End all
+                    </button>
+                  </div>
+                </div>
+              }
+
+              @if (showConferenceInput()) {
                 <div class="mt-2 flex w-full gap-2">
                   <input
                     type="text"
                     class="input flex-1"
+                    placeholder="Extension to add"
+                    aria-label="Extension to add to the conference"
+                    [value]="conferenceTarget()"
+                    (input)="conferenceTarget.set($any($event.target).value)"
+                    (keydown.enter)="addToConference()"
+                  />
+                  <button type="button" class="btn btn-default" (click)="addToConference()">Add</button>
+                </div>
+              }
+
+                            @if (showTransferInput()) {
+                <div class="mt-2 w-full">
+                  <input
+                    type="text"
+                    class="input w-full"
                     placeholder="Extension to transfer to"
                     aria-label="Transfer to extension"
                     [value]="transferTarget()"
                     (input)="transferTarget.set($any($event.target).value)"
                     (keydown.enter)="transfer(call)"
                   />
-                  <button type="button" class="btn btn-default" (click)="transfer(call)">
-                    <app-icon name="forward" [size]="14" />
-                  </button>
+                  <div class="mt-2 flex gap-2">
+                    <!-- Blind hands the call over immediately; ask first
+                         dials the target with the caller on hold, so the
+                         agent can hand over in person. -->
+                    <button type="button" class="btn btn-default btn-sm flex-1" (click)="transfer(call)">
+                      Transfer now
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm flex-1" (click)="consult()">
+                      Ask first
+                    </button>
+                  </div>
                 </div>
               }
             </div>

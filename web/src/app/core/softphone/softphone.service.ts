@@ -82,6 +82,16 @@ export class SoftphoneService {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private rebuildTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** Whether this agent is in a conference, and whether they are muted
+   *  within it. Tracked locally because the PBX reports no conference
+   *  membership anywhere this service can read — so these follow what the
+   *  agent has successfully done from here, and reset when the call ends. */
+  private readonly _inConference = signal(false);
+  private readonly _conferenceMuted = signal(false);
+  /** Whether an attended transfer is part-way through (the caller is on
+   *  hold and the agent is speaking to the target). */
+  private readonly _consulting = signal(false);
+
   private readonly _queueBusy = signal(false);
   private readonly _queueError = signal<string | null>(null);
 
@@ -124,6 +134,9 @@ export class SoftphoneService {
 
   readonly liveQueues = this._liveQueues.asReadonly();
   readonly liveAgents = this._liveAgents.asReadonly();
+  readonly inConference = this._inConference.asReadonly();
+  readonly conferenceMuted = this._conferenceMuted.asReadonly();
+  readonly consulting = this._consulting.asReadonly();
   readonly queueBusy = this._queueBusy.asReadonly();
   readonly queueError = this._queueError.asReadonly();
   readonly historyEntries = this._historyEntries.asReadonly();
@@ -385,6 +398,13 @@ export class SoftphoneService {
           this.refreshLiveQueues();
           this.refreshLiveAgents();
         }
+        // These track what the agent asked the PBX for, so they only mean
+        // anything while a call is up.
+        if (this._calls().length === 0) {
+          this._inConference.set(false);
+          this._conferenceMuted.set(false);
+          this._consulting.set(false);
+        }
         this.syncCallLog(event.session, isNewCall);
         const who = event.session.displayName?.trim() || event.session.remote;
         this.pushLog(
@@ -573,6 +593,91 @@ export class SoftphoneService {
     void this.engine?.transferCall({ callId, target, kind: 'blind' });
   }
 
+  // --- Conference and attended transfer ----------------------------------
+  //
+  // These run over v3's AMI surface rather than through the SIP engine: a
+  // browser cannot mix three audio streams, and a REFER cannot express
+  // "let me speak to them first". The PBX does both, so the client only
+  // asks for them and tracks what it asked for.
+
+  /** Pull another extension into this call. */
+  conferenceStart(targetExt: string): void {
+    const ext = targetExt.trim();
+    if (!ext) {
+      return;
+    }
+    this.api.post('secure/softphone/conference/start', { target_ext: ext }).subscribe({
+      next: () => {
+        this._inConference.set(true);
+        this._conferenceMuted.set(false);
+        this.pushLog('info', `Conference started with ${ext}`);
+      },
+      error: (err) => this.pushLog('error', extractError(err, `Could not add ${ext} to the call`)),
+    });
+  }
+
+  /** End it for everyone. */
+  conferenceEnd(): void {
+    this.api.post('secure/softphone/conference/end', {}).subscribe({
+      next: () => {
+        this._inConference.set(false);
+        this.pushLog('info', 'Conference ended');
+      },
+      error: (err) => this.pushLog('error', extractError(err, 'Could not end the conference')),
+    });
+  }
+
+  /** Leave, and let the others carry on without this agent. */
+  conferenceLeave(): void {
+    this.api.post('secure/softphone/conference/leave', {}).subscribe({
+      next: () => {
+        this._inConference.set(false);
+        this.pushLog('info', 'Left the conference');
+      },
+      error: (err) => this.pushLog('error', extractError(err, 'Could not leave the conference')),
+    });
+  }
+
+  /** Mute this agent inside the conference. Distinct from the ordinary mute
+   *  button, which only disables the local microphone track — in a
+   *  conference the PBX is mixing, so it has to be told. */
+  conferenceMute(muted: boolean): void {
+    this.api.post('secure/softphone/conference/mute', { muted }).subscribe({
+      next: () => {
+        this._conferenceMuted.set(muted);
+        this.pushLog('info', muted ? 'Muted in the conference' : 'Unmuted in the conference');
+      },
+      error: (err) => this.pushLog('error', extractError(err, 'Could not change conference mute')),
+    });
+  }
+
+  /** Speak to the target before handing the call over; the caller waits on
+   *  hold until this is completed or cancelled. */
+  attendedTransfer(extension: string): void {
+    const ext = extension.trim();
+    if (!ext) {
+      return;
+    }
+    this.api.post('secure/softphone/transfer/attended', { extension: ext }).subscribe({
+      next: () => {
+        this._consulting.set(true);
+        this.pushLog('info', `Consulting ${ext} before transferring`);
+      },
+      error: (err) => this.pushLog('error', extractError(err, `Could not consult ${ext}`)),
+    });
+  }
+
+  /** Abandon the consultation and take the caller back. */
+  attendedTransferCancel(): void {
+    this.api.post('secure/softphone/transfer/attended/cancel', {}).subscribe({
+      next: () => {
+        this._consulting.set(false);
+        this.pushLog('info', 'Transfer cancelled — caller is back with you');
+      },
+      error: (err) => this.pushLog('error', extractError(err, 'Could not cancel the transfer')),
+    });
+  }
+
   /** Test-only access to the underlying fake, for driving scenarios from a spec or a dev harness. */
   get fakeEngineForTesting(): FakeSipEngine | null {
     return this.engine instanceof FakeSipEngine ? this.engine : null;
@@ -716,7 +821,17 @@ export class SoftphoneService {
    * needed for "listening", the softphone panel's normal in-call card
    * handles it. */
   spy(targetExt: string, mode: SpyMode): void {
-    this.api.post('secure/softphone/queue/spy', { target_ext: targetExt, mode }).subscribe({
+    // Stays on v2 deliberately. v3's /ami/whisper/start and
+    // /ami/supervision/start take only a target and work out WHO is
+    // supervising from the token's own user — and this service holds one
+    // shared service account that owns no extension, so they answer "your
+    // account is not linked to a FreePBX extension" no matter who clicked.
+    // v2's spy action carries the supervisor's own channel in the request,
+    // which is the only way to express it from here.
+    const path = 'secure/softphone/queue/spy';
+    const body = { target_ext: targetExt, mode };
+
+    this.api.post(path, body).subscribe({
       next: () => this.pushLog('info', `${mode} started on ${targetExt}`),
       error: (err) => this.pushLog('error', extractError(err, `Could not ${mode} ${targetExt}`)),
     });
@@ -864,6 +979,9 @@ export class SoftphoneService {
     this._connectState.set('idle');
     this._calls.set([]);
     this._remoteStream.set(null);
+    this._inConference.set(false);
+    this._conferenceMuted.set(false);
+    this._consulting.set(false);
     this._liveQueues.set(null);
     this._liveAgents.set(null);
     this._callMeta.set({});

@@ -116,6 +116,18 @@ func (h *Handlers) ConferenceMute(c *gin.Context) {
 // Coaching: heard by the agent, not by the caller. A separate endpoint from
 // monitor/barge because v3 gives it one — it is not a mode of
 // /ami/supervision/start.
+//
+// NOT REACHABLE FROM THE UI TODAY, and the reason is worth knowing before
+// wiring it up again. v3's /ami/whisper/start accepts only a target; it
+// works out who is DOING the whispering from the token's own user, and
+// this service authenticates as one shared account that owns no extension,
+// so it answers "your account is not linked to a FreePBX extension"
+// whoever clicked. The client therefore still uses the v2 spy action,
+// which carries the supervisor's own channel in the request.
+//
+// Making this usable means giving v3 a per-user token rather than a
+// service account — which the directory work makes possible, since agents
+// are now v3 users, but which nothing here does yet.
 func (h *Handlers) WhisperStart(c *gin.Context) {
 	if h.pbxV3 == nil {
 		apires.Error(c, http.StatusServiceUnavailable, "this needs pbx-worker v3 to be configured", nil)
