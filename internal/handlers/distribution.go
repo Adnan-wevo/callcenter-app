@@ -40,7 +40,7 @@ type distributionResponse struct {
 // from the identical two report calls.
 func (h *Handlers) Distribution(c *gin.Context) {
 	p, clamped := parseListParams(c)
-	settings := reports.Defaults()
+	settings := h.loadReportSettings(c.Request.Context())
 
 	answered, err := h.pbx.AnsweredCalls(c.Request.Context(), p)
 	if err != nil {

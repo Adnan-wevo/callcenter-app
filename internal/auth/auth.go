@@ -85,6 +85,30 @@ const (
 	// those specific endpoints regardless, this is the UI-level match.
 	PermRealtimeMonitorIndex   = "call-center.realtime-monitor.index"
 	PermRealtimeMonitorActions = "call-center.realtime-monitor.actions"
+
+	// Same two names as Modules/CallCenter/app/Livewire/Settings/Index.php's
+	// own $this->authorize calls — no store/destroy, this is a fixed set of
+	// rows (see migrations/callcenter/004_call_center_settings.sql), not a
+	// free CRUD.
+	PermSettingsIndex  = "call-center.settings.index"
+	PermSettingsUpdate = "call-center.settings.update"
+
+	// Same four names as SIP Extensions/User Filters use for their own
+	// CRUD — see Modules/CallCenter/app/Livewire/QueueGroups/*.php (which
+	// splits create/store into two permissions; this service collapses
+	// that the same way it already did for SIP Extensions).
+	PermQueueGroupsIndex   = "call-center.queue-groups.index"
+	PermQueueGroupsStore   = "call-center.queue-groups.store"
+	PermQueueGroupsUpdate  = "call-center.queue-groups.update"
+	PermQueueGroupsDestroy = "call-center.queue-groups.destroy"
+
+	// Same four-name shape as Queue Groups — DEFINITIONS only, see
+	// internal/scheduledreports' own doc comment: nothing executes these
+	// rows yet, there is no email sender or scheduler process.
+	PermScheduledReportsIndex   = "call-center.scheduled-reports.index"
+	PermScheduledReportsStore   = "call-center.scheduled-reports.store"
+	PermScheduledReportsUpdate  = "call-center.scheduled-reports.update"
+	PermScheduledReportsDestroy = "call-center.scheduled-reports.destroy"
 )
 
 // AllPermissions is the catalogue, in the order a UI would list it.
@@ -110,6 +134,16 @@ var AllPermissions = []string{
 	PermUserFiltersDestroy,
 	PermRealtimeMonitorIndex,
 	PermRealtimeMonitorActions,
+	PermSettingsIndex,
+	PermSettingsUpdate,
+	PermQueueGroupsIndex,
+	PermQueueGroupsStore,
+	PermQueueGroupsUpdate,
+	PermQueueGroupsDestroy,
+	PermScheduledReportsIndex,
+	PermScheduledReportsStore,
+	PermScheduledReportsUpdate,
+	PermScheduledReportsDestroy,
 }
 
 var (

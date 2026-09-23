@@ -9,6 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"callcenter-service/internal/auth"
+	"callcenter-service/internal/callcentersettings"
 	"callcenter-service/internal/calllog"
 	"callcenter-service/internal/config"
 	"callcenter-service/internal/db/qstats"
@@ -16,6 +17,8 @@ import (
 	"callcenter-service/internal/gateway/pbxcontrol"
 	"callcenter-service/internal/gateway/pbxworker"
 	"callcenter-service/internal/handlers"
+	"callcenter-service/internal/queuegroups"
+	"callcenter-service/internal/scheduledreports"
 	"callcenter-service/internal/security/hmacsig"
 	"callcenter-service/internal/softphone"
 )
@@ -50,6 +53,9 @@ func main() {
 	}
 	defer ccDB.Close()
 	callLogRepo := calllog.NewRepository(ccDB)
+	settingsRepo := callcentersettings.NewRepository(ccDB)
+	queueGroupsRepo := queuegroups.NewRepository(ccDB)
+	scheduledReportsRepo := scheduledreports.NewRepository(ccDB)
 
 	pbxClient, err := pbxworker.New(cfg)
 	if err != nil {
@@ -132,7 +138,7 @@ func main() {
 		},
 	)
 
-	h := handlers.New(qstatsRepo, pbxClient, callbackClient, authSvc, softphoneSvc, callLogRepo, pbxControlClient, sipExtensionRepo)
+	h := handlers.New(qstatsRepo, pbxClient, callbackClient, authSvc, softphoneSvc, callLogRepo, pbxControlClient, sipExtensionRepo, settingsRepo, queueGroupsRepo, scheduledReportsRepo)
 	router := handlers.NewRouter(h, authSvc, cfg.CORSOrigins)
 
 	addr := ":" + cfg.HTTPPort

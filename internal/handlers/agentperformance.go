@@ -9,7 +9,6 @@ import (
 
 	"callcenter-service/internal/apires"
 	"callcenter-service/internal/gateway/pbxworker"
-	"callcenter-service/internal/reports"
 )
 
 // agentStats is one agent's row in the response. Session/pause seconds come
@@ -44,7 +43,7 @@ type agentStats struct {
 // trusting this screen's numbers over a raw switch report.
 func (h *Handlers) AgentPerformance(c *gin.Context) {
 	p, clamped := parseListParams(c)
-	settings := reports.Defaults()
+	settings := h.loadReportSettings(c.Request.Context())
 
 	events, err := h.pbx.AgentEvents(c.Request.Context(), p)
 	if err != nil {

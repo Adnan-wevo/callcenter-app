@@ -22,6 +22,9 @@ services:
       - ./migrations/callcenter/001_init.sql:/docker-entrypoint-initdb.d/02_callcenter_init.sql:ro
       - ./migrations/callcenter/002_sip_extensions.sql:/docker-entrypoint-initdb.d/03_sip_extensions_init.sql:ro
       - ./migrations/callcenter/003_call_logs_extension_index.sql:/docker-entrypoint-initdb.d/04_call_logs_extension_index.sql:ro
+      - ./migrations/callcenter/004_call_center_settings.sql:/docker-entrypoint-initdb.d/05_call_center_settings.sql:ro
+      - ./migrations/callcenter/005_queue_groups.sql:/docker-entrypoint-initdb.d/06_queue_groups.sql:ro
+      - ./migrations/callcenter/006_scheduled_reports.sql:/docker-entrypoint-initdb.d/07_scheduled_reports.sql:ro
       - qstats-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]

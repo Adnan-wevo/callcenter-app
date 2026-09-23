@@ -35,7 +35,7 @@ func (h *Handlers) ListUnansweredCalls(c *gin.Context) {
 		apires.Error(c, http.StatusBadGateway, "failed to load unanswered calls", nil)
 		return
 	}
-	kept, _ := reports.FilterShortAbandons(rows, reports.Defaults().ShortAbandonThreshold)
+	kept, _ := reports.FilterShortAbandons(rows, h.loadReportSettings(c.Request.Context()).ShortAbandonThreshold)
 	page, meta := paginate(c, kept)
 	apires.Collection(c, http.StatusOK, page, meta)
 }

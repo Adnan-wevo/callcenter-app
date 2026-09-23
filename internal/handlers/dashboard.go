@@ -50,7 +50,7 @@ type dashboardSummary struct {
 // breakdown in a single pass.
 func (h *Handlers) DashboardSummary(c *gin.Context) {
 	p, clamped := parseListParams(c)
-	settings := reports.Defaults()
+	settings := h.loadReportSettings(c.Request.Context())
 
 	answered, err := h.pbx.AnsweredCalls(c.Request.Context(), p)
 	if err != nil {

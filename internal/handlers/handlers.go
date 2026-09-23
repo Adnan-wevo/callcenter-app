@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,24 +11,30 @@ import (
 
 	"callcenter-service/internal/apires"
 	"callcenter-service/internal/auth"
+	"callcenter-service/internal/callcentersettings"
 	"callcenter-service/internal/calllog"
 	"callcenter-service/internal/db/qstats"
 	"callcenter-service/internal/gateway/laravel"
 	"callcenter-service/internal/gateway/pbxcontrol"
 	"callcenter-service/internal/gateway/pbxworker"
+	"callcenter-service/internal/queuegroups"
 	"callcenter-service/internal/reports"
+	"callcenter-service/internal/scheduledreports"
 	"callcenter-service/internal/softphone"
 )
 
 type Handlers struct {
-	qstats          *qstats.Repository
-	pbx             pbxworker.ReportsClient
-	laravelCallback laravel.CallbackClient
-	auth            *auth.Service
-	softphone       *softphone.Service
-	callLogs        *calllog.Repository
-	pbxControl      *pbxcontrol.Client
-	sipExtensions   *softphone.Repository
+	qstats           *qstats.Repository
+	pbx              pbxworker.ReportsClient
+	laravelCallback  laravel.CallbackClient
+	auth             *auth.Service
+	softphone        *softphone.Service
+	callLogs         *calllog.Repository
+	pbxControl       *pbxcontrol.Client
+	sipExtensions    *softphone.Repository
+	settings         *callcentersettings.Repository
+	queueGroups      *queuegroups.Repository
+	scheduledReports *scheduledreports.Repository
 }
 
 func New(
@@ -39,16 +46,40 @@ func New(
 	callLogs *calllog.Repository,
 	pbxControl *pbxcontrol.Client,
 	sipExtensions *softphone.Repository,
+	settings *callcentersettings.Repository,
+	queueGroups *queuegroups.Repository,
+	scheduledReports *scheduledreports.Repository,
 ) *Handlers {
 	return &Handlers{
-		qstats:          qstatsRepo,
-		pbx:             pbx,
-		laravelCallback: laravelCallback,
-		auth:            authSvc,
-		softphone:       softphoneSvc,
-		callLogs:        callLogs,
-		pbxControl:      pbxControl,
-		sipExtensions:   sipExtensions,
+		qstats:           qstatsRepo,
+		pbx:              pbx,
+		laravelCallback:  laravelCallback,
+		auth:             authSvc,
+		softphone:        softphoneSvc,
+		callLogs:         callLogs,
+		pbxControl:       pbxControl,
+		sipExtensions:    sipExtensions,
+		settings:         settings,
+		queueGroups:      queueGroups,
+		scheduledReports: scheduledReports,
+	}
+}
+
+// loadReportSettings is reports.Defaults() with the DB in the loop — the
+// resolution of open decision D3 (see internal/reports/settings.go's own
+// doc comment): a value actually stored in call_center_settings wins, and
+// anything missing/unreadable falls back to the documented default, so a
+// DB hiccup degrades a report's numbers to "unconfigured install" rather
+// than breaking the request.
+func (h *Handlers) loadReportSettings(ctx context.Context) reports.Settings {
+	d := reports.Defaults()
+	if h.settings == nil {
+		return d
+	}
+	return reports.Settings{
+		SLAInterval:           h.settings.GetInt(ctx, "sla", "sla_interval", d.SLAInterval),
+		ShortAbandonThreshold: h.settings.GetInt(ctx, "threshold", "short_abandon_threshold", d.ShortAbandonThreshold),
+		WrapUp:                h.settings.GetInt(ctx, "threshold", "wrap_up", d.WrapUp),
 	}
 }
 

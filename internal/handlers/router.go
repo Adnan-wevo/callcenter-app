@@ -121,6 +121,29 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 			filters.DELETE("/:id", middleware.RequirePermission(auth.PermUserFiltersDestroy), h.ClearUserFilters)
 		}
 
+		settingsGroup := secure.Group("/call-center/settings")
+		{
+			settingsGroup.GET("/categories", middleware.RequirePermission(auth.PermSettingsIndex), h.ListSettingCategories)
+			settingsGroup.GET("/:category", middleware.RequirePermission(auth.PermSettingsIndex), h.ListSettingsForCategory)
+			settingsGroup.PUT("/:category", middleware.RequirePermission(auth.PermSettingsUpdate), h.UpdateSettingsForCategory)
+		}
+
+		queueGroupsGroup := secure.Group("/admin/queue-groups")
+		{
+			queueGroupsGroup.GET("", middleware.RequirePermission(auth.PermQueueGroupsIndex), h.ListQueueGroups)
+			queueGroupsGroup.POST("", middleware.RequirePermission(auth.PermQueueGroupsStore), h.CreateQueueGroup)
+			queueGroupsGroup.PUT("/:id", middleware.RequirePermission(auth.PermQueueGroupsUpdate), h.UpdateQueueGroup)
+			queueGroupsGroup.DELETE("/:id", middleware.RequirePermission(auth.PermQueueGroupsDestroy), h.DeleteQueueGroup)
+		}
+
+		scheduledReportsGroup := secure.Group("/admin/scheduled-reports")
+		{
+			scheduledReportsGroup.GET("", middleware.RequirePermission(auth.PermScheduledReportsIndex), h.ListScheduledReports)
+			scheduledReportsGroup.POST("", middleware.RequirePermission(auth.PermScheduledReportsStore), h.CreateScheduledReport)
+			scheduledReportsGroup.PUT("/:id", middleware.RequirePermission(auth.PermScheduledReportsUpdate), h.UpdateScheduledReport)
+			scheduledReportsGroup.DELETE("/:id", middleware.RequirePermission(auth.PermScheduledReportsDestroy), h.DeleteScheduledReport)
+		}
+
 		cc := secure.Group("/call-center")
 		{
 			// Lookups feed the filter bar on every report screen, so they are
