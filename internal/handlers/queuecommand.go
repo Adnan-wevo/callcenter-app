@@ -409,8 +409,69 @@ func (h *Handlers) LiveQueues(c *gin.Context) {
 // GET /api/v1/secure/softphone/agents
 func (h *Handlers) LiveAgents(c *gin.Context) {
 	h.liveSnapshot(c, func(ctx *gin.Context) (any, pbxcontrol.Snapshot, error) {
-		return h.pbxControl.Agents(ctx.Request.Context())
+		agents, meta, err := h.pbxControl.Agents(ctx.Request.Context())
+		if err == nil {
+			h.overlayLivePauseState(ctx.Request.Context(), agents)
+		}
+		return agents, meta, err
 	})
+}
+
+// overlayLivePauseState corrects the pause flags in a v2 agent snapshot
+// using v3's live AMI read.
+//
+// v2's snapshot is a file pbx-worker rewrites periodically, so a pause
+// takes 5-8 seconds to appear in it (measured); v3 reports the same change
+// in under a second because it queries AMI on the request. That gap is what
+// made the pause badge look broken, and what the client's optimistic
+// override exists to cover — narrowing it here shortens how long that
+// override has to paper over.
+//
+// Only the pause flags are taken from v3. Its agent rows carry no
+// active_call and, on this deployment, an empty state string, so v2 remains
+// the source for everything else rather than this being a wholesale swap
+// that would quietly drop fields the Contacts tab renders.
+//
+// Best-effort by design: any failure leaves the v2 values untouched, since
+// a slightly stale pause flag is a much better outcome than a failed
+// snapshot request.
+//
+// A consequence worth knowing: Paused is now fresh while the Status string
+// beside it is still v2's, so for a few seconds after a change they can
+// disagree ("paused: false" next to "status: paused"). Status is not
+// corrected here because v3 cannot say what it should become instead — its
+// own state field is empty on this deployment — and inventing one would be
+// a guess. The boolean is the authoritative field; the string converges.
+func (h *Handlers) overlayLivePauseState(ctx context.Context, snapshot pbxcontrol.AgentSnapshot) {
+	if h.pbxV3 == nil || len(snapshot.Agents) == 0 {
+		return
+	}
+	rows, err := h.pbxV3.AgentStatus(ctx)
+	if err != nil {
+		return
+	}
+
+	// One row per (queue, agent) pair, so an agent in three queues appears
+	// three times. Paused in ANY queue counts as paused, matching what the
+	// v2 snapshot's own single flag means.
+	paused := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		if row.Agent == "" {
+			continue
+		}
+		paused[row.Agent] = paused[row.Agent] || row.Paused != 0
+	}
+
+	for key, agent := range snapshot.Agents {
+		ext := agent.Extension.String()
+		if ext == "" {
+			ext = key
+		}
+		if live, ok := paused[ext]; ok {
+			agent.Paused = live
+			snapshot.Agents[key] = agent
+		}
+	}
 }
 
 // GET /api/v1/secure/softphone/live-calls
