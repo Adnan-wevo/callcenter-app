@@ -152,6 +152,68 @@ func (h *Handlers) QueueUnpause(c *gin.Context) {
 	})
 }
 
+type agentPauseBody struct {
+	Interface string `json:"interface" binding:"required"`
+	Queue     string `json:"queue"`
+	Reason    string `json:"reason"`
+}
+
+// POST /api/v1/secure/softphone/queue/agent-pause — supervisor only.
+//
+// The self-service /queue/pause above is deliberately locked to the
+// CALLER's own interface (see interfaceFor's doc comment) so an ordinary
+// agent endpoint can never pause someone else. This is the Realtime
+// Monitor's own action — a supervisor acting on an arbitrary agent — so it
+// is a separate, separately-gated endpoint rather than a body field bolted
+// onto the self-service one, the same split redirect/pickup/spy already
+// use for the same reason.
+func (h *Handlers) QueueAgentPause(c *gin.Context) {
+	var body agentPauseBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		apires.Error(c, http.StatusUnprocessableEntity, "interface is required", nil)
+		return
+	}
+	h.dispatchAndRespond(c, "pause", pbxcontrol.PausePayload{
+		Interface: body.Interface,
+		Queue:     body.Queue,
+		Reason:    body.Reason,
+	})
+}
+
+// POST /api/v1/secure/softphone/queue/agent-unpause — supervisor only.
+func (h *Handlers) QueueAgentUnpause(c *gin.Context) {
+	var body agentPauseBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		apires.Error(c, http.StatusUnprocessableEntity, "interface is required", nil)
+		return
+	}
+	h.dispatchAndRespond(c, "unpause", pbxcontrol.PausePayload{
+		Interface: body.Interface,
+		Queue:     body.Queue,
+	})
+}
+
+type agentLogoutBody struct {
+	Interface string   `json:"interface" binding:"required"`
+	Queues    []string `json:"queues"`
+}
+
+// POST /api/v1/secure/softphone/queue/agent-logout — supervisor only.
+func (h *Handlers) QueueAgentLogout(c *gin.Context) {
+	var body agentLogoutBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		apires.Error(c, http.StatusUnprocessableEntity, "interface is required", nil)
+		return
+	}
+	if len(body.Queues) == 0 {
+		body.Queues = []string{"all"}
+	}
+	h.dispatchAndRespond(c, "queue-logout", pbxcontrol.QueueLogoutPayload{
+		Interface: body.Interface,
+		Queues:    body.Queues,
+	})
+}
+
 type redirectBody struct {
 	Channel   string `json:"channel"`
 	AgentExt  string `json:"agent_ext"`

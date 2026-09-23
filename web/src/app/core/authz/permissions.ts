@@ -22,6 +22,8 @@ export const PERMISSIONS = [
   'call-center.call-search.export',
   'call-center.agent-performance.index',
   'call-center.distribution.index',
+  'call-center.realtime-monitor.index',
+  'call-center.realtime-monitor.actions',
   'softphone.supervise',
 ] as const;
 

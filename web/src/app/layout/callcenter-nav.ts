@@ -78,6 +78,12 @@ const groups: CallCenterGroup[] = [
         icon: 'user',
         permission: 'call-center.agent-performance.index',
       },
+      {
+        label: 'Realtime Monitor',
+        route: '/realtime-monitor',
+        icon: 'grid',
+        permission: 'call-center.realtime-monitor.index',
+      },
     ],
   },
 ];

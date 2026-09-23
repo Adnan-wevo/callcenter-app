@@ -66,6 +66,14 @@ const (
 	PermSIPExtensionsStore   = "call-center.sip-extensions.store"
 	PermSIPExtensionsUpdate  = "call-center.sip-extensions.update"
 	PermSIPExtensionsDestroy = "call-center.sip-extensions.destroy"
+
+	// Same two names as RealtimeMonitor/Index.php's own $this->authorize
+	// calls. "index" gates viewing the board; "actions" gates the
+	// supervisor controls on it (pause/unpause/logout an agent, redirect a
+	// waiting call) — enforced server-side by PermSoftphoneSupervise on
+	// those specific endpoints regardless, this is the UI-level match.
+	PermRealtimeMonitorIndex   = "call-center.realtime-monitor.index"
+	PermRealtimeMonitorActions = "call-center.realtime-monitor.actions"
 )
 
 // AllPermissions is the catalogue, in the order a UI would list it.
@@ -85,6 +93,8 @@ var AllPermissions = []string{
 	PermSIPExtensionsStore,
 	PermSIPExtensionsUpdate,
 	PermSIPExtensionsDestroy,
+	PermRealtimeMonitorIndex,
+	PermRealtimeMonitorActions,
 }
 
 var (

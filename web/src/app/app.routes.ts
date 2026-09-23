@@ -73,6 +73,15 @@ export const routes: Routes = [
         (m) => m.AGENT_PERFORMANCE_ROUTES,
       ),
   },
+  {
+    path: 'realtime-monitor',
+    canActivate: [authGuard, requirePermission('call-center.realtime-monitor.index')],
+    resolve: { authz: permissionsResolver },
+    loadChildren: () =>
+      import('./features/realtime-monitor/realtime-monitor.routes').then(
+        (m) => m.REALTIME_MONITOR_ROUTES,
+      ),
+  },
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   {
     // An unknown URL is a 404, not a silent bounce to the dashboard: the

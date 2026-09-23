@@ -1,0 +1,201 @@
+<app-page-header
+  title="Realtime Monitor"
+  description="Live queue, agent and waiting-call status — polled every few seconds."
+  icon="grid"
+  iconClass="text-brand"
+  [hasActions]="true"
+>
+  <label class="flex items-center gap-2 text-sm">
+    <input type="checkbox" [checked]="autoRefresh()" (change)="autoRefresh.set($any($event.target).checked)" />
+    Auto refresh
+  </label>
+  <button type="button" class="btn btn-outline btn-sm gap-2" (click)="refresh()">
+    <app-icon name="refresh-cw" [size]="14" />
+    Refresh
+  </button>
+</app-page-header>
+
+@if (loading()) {
+  <div class="mt-6 flex justify-center py-12">
+    <div class="border-muted-foreground/30 border-t-foreground size-6 animate-spin rounded-full border-2"></div>
+  </div>
+} @else if (failed()) {
+  <div class="mt-6 rounded-md border p-6 text-center">
+    <p class="text-muted-foreground text-sm">Could not reach the PBX worker.</p>
+    <button type="button" class="btn btn-outline btn-sm mt-3" (click)="refresh()">Try again</button>
+  </div>
+} @else {
+  <!-- Totals -->
+  <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <div class="card p-4">
+      <p class="text-muted-foreground text-xs">Waiting</p>
+      <p class="text-2xl font-bold">{{ totals().waiting }}</p>
+    </div>
+    <div class="card p-4">
+      <p class="text-muted-foreground text-xs">Staffed</p>
+      <p class="text-2xl font-bold">{{ totals().staffed }}</p>
+    </div>
+    <div class="card p-4">
+      <p class="text-muted-foreground text-xs">Available</p>
+      <p class="text-2xl font-bold text-emerald-600">{{ totals().available }}</p>
+    </div>
+    <div class="card p-4">
+      <p class="text-muted-foreground text-xs">Paused</p>
+      <p class="text-2xl font-bold text-amber-600">{{ totals().paused }}</p>
+    </div>
+    <div class="card p-4">
+      <p class="text-muted-foreground text-xs">Completed today</p>
+      <p class="text-2xl font-bold">{{ totals().completedToday }}</p>
+    </div>
+    <div class="card p-4">
+      <p class="text-muted-foreground text-xs">Abandoned today</p>
+      <p class="text-2xl font-bold text-destructive">{{ totals().abandonedToday }}</p>
+    </div>
+  </div>
+
+  <!-- Per-queue summary -->
+  <div class="card mt-6 overflow-hidden">
+    <div class="border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">Queues</div>
+    @if (summary().length === 0) {
+      <p class="text-muted-foreground px-4 py-8 text-center text-sm">No queues reported.</p>
+    } @else {
+      <table class="w-full text-sm">
+        <thead class="text-muted-foreground border-b">
+          <tr>
+            <th class="px-4 py-2 text-left font-medium">Queue</th>
+            <th class="px-4 py-2 text-right font-medium">Waiting</th>
+            <th class="px-4 py-2 text-right font-medium">Staffed</th>
+            <th class="px-4 py-2 text-right font-medium">Available</th>
+            <th class="px-4 py-2 text-right font-medium">Paused</th>
+            <th class="px-4 py-2 text-right font-medium">Completed</th>
+            <th class="px-4 py-2 text-right font-medium">Abandoned</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (q of summary(); track q.id) {
+            <tr class="border-b last:border-0">
+              <td class="px-4 py-2 font-mono">{{ q.id }}</td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ q.waiting }}</td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ q.staffed }}</td>
+              <td class="px-4 py-2 text-right tabular-nums text-emerald-600">{{ q.available }}</td>
+              <td class="px-4 py-2 text-right tabular-nums text-amber-600">{{ q.paused }}</td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ q.completedToday }}</td>
+              <td class="px-4 py-2 text-right tabular-nums text-destructive">{{ q.abandonedToday }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+
+  <div class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <!-- Waiting calls -->
+    <div class="card overflow-hidden">
+      <div class="border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
+        Waiting calls ({{ waitingCalls().length }})
+      </div>
+      @if (waitingCalls().length === 0) {
+        <p class="text-muted-foreground px-4 py-8 text-center text-sm">No calls waiting.</p>
+      } @else {
+        <div class="max-h-96 overflow-y-auto">
+          @for (call of waitingCalls(); track call.uniqueId) {
+            <div class="flex items-center gap-2 border-b px-4 py-2 text-sm last:border-0">
+              <span class="text-muted-foreground w-4 shrink-0 text-center text-xs">{{ call.position }}</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-medium">{{ call.callerId || 'Unknown' }}</p>
+                <p class="text-muted-foreground truncate text-xs">{{ call.queue }} · {{ wait(call.waitSeconds) }}</p>
+              </div>
+              <button
+                type="button"
+                class="hover:bg-accent shrink-0 rounded p-1.5"
+                *hasPermission="'call-center.realtime-monitor.actions'"
+                title="Redirect"
+                aria-label="Redirect"
+                (click)="startRedirect(call.channel)"
+              >
+                <app-icon name="forward" [size]="14" />
+              </button>
+            </div>
+            @if (redirectingChannel() === call.channel) {
+              <div class="flex items-center gap-1.5 border-b px-4 py-1.5 last:border-0">
+                <input
+                  type="text"
+                  class="input h-7 min-w-0 flex-1 text-xs"
+                  placeholder="Extension to redirect to…"
+                  [value]="redirectTarget()"
+                  (input)="redirectTarget.set($any($event.target).value)"
+                  (keydown.enter)="sendRedirect(call.channel)"
+                />
+                <button type="button" class="btn btn-sm !h-7 !px-2 text-xs" (click)="sendRedirect(call.channel)">
+                  Send
+                </button>
+              </div>
+            }
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Agents -->
+    <div class="card overflow-hidden">
+      <div class="border-b px-4 py-2.5 text-xs font-semibold tracking-wide uppercase">
+        Agents ({{ agentRows().length }})
+      </div>
+      @if (agentRows().length === 0) {
+        <p class="text-muted-foreground px-4 py-8 text-center text-sm">No agents reported.</p>
+      } @else {
+        <div class="max-h-96 overflow-y-auto">
+          @for (agent of agentRows(); track agent.extension) {
+            <div class="flex items-center gap-2 border-b px-4 py-2 text-sm last:border-0">
+              <span
+                class="size-2 shrink-0 rounded-full"
+                [class]="agent.active_call ? 'bg-amber-500' : agent.paused ? 'bg-zinc-400' : 'bg-emerald-500'"
+              ></span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-mono font-medium">{{ agent.extension }}</p>
+                <p class="text-muted-foreground truncate text-xs">
+                  {{ agent.status }}
+                  @if (agent.active_call) {
+                    · on {{ agent.active_call.caller_id }}
+                  }
+                </p>
+              </div>
+              <div class="flex shrink-0 gap-1" *hasPermission="'call-center.realtime-monitor.actions'">
+                @if (agent.paused) {
+                  <button
+                    type="button"
+                    class="hover:bg-accent rounded p-1.5 text-emerald-600"
+                    title="Resume"
+                    aria-label="Resume"
+                    (click)="unpause('PJSIP/' + agent.extension)"
+                  >
+                    <app-icon name="play" [size]="14" />
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="hover:bg-accent rounded p-1.5 text-amber-600"
+                    title="Pause"
+                    aria-label="Pause"
+                    (click)="pause('PJSIP/' + agent.extension)"
+                  >
+                    <app-icon name="pause" [size]="14" />
+                  </button>
+                }
+                <button
+                  type="button"
+                  class="hover:bg-accent text-destructive rounded p-1.5"
+                  title="Log out of all queues"
+                  aria-label="Log out"
+                  (click)="logout('PJSIP/' + agent.extension)"
+                >
+                  <app-icon name="log-out" [size]="14" />
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+}

@@ -90,6 +90,9 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 			sp.POST("/queue/redirect", supervise, h.QueueRedirect)
 			sp.POST("/queue/pickup", supervise, h.QueuePickup)
 			sp.POST("/queue/spy", supervise, h.QueueSpy)
+			sp.POST("/queue/agent-pause", supervise, h.QueueAgentPause)
+			sp.POST("/queue/agent-unpause", supervise, h.QueueAgentUnpause)
+			sp.POST("/queue/agent-logout", supervise, h.QueueAgentLogout)
 		}
 
 		// SIP extension administration — who may register as which
