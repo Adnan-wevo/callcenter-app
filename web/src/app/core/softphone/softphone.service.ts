@@ -79,6 +79,16 @@ export class SoftphoneService {
   private readonly _queueBusy = signal(false);
   private readonly _queueError = signal<string | null>(null);
 
+  /** Optimistic overrides for `queuePaused`/`queueLoggedIn`, set the instant
+   * the agent clicks and cleared once the next live-agents poll confirms
+   * (or the request fails) — without this, the badge only moves after a
+   * full pbxcontrol dispatch round trip (poll every 500ms, up to 25s) PLUS
+   * a second snapshot fetch, which reads as the button doing nothing for a
+   * beat. AMI (via `selfAgent`) stays the eventual source of truth; this
+   * only covers the gap while that's in flight. */
+  private readonly _pauseOptimistic = signal<boolean | null>(null);
+  private readonly _loggedInOptimistic = signal<boolean | null>(null);
+
   private readonly _historyEntries = signal<CallLogEntry[]>([]);
   private readonly _historyMeta = signal<ApiMeta | null>(null);
 
@@ -116,8 +126,10 @@ export class SoftphoneService {
     return agents.agents[bootstrap.extension] ?? null;
   });
 
-  readonly queueLoggedIn = computed(() => (this.selfAgent()?.queues.length ?? 0) > 0);
-  readonly queuePaused = computed(() => this.selfAgent()?.paused ?? false);
+  readonly queueLoggedIn = computed(
+    () => this._loggedInOptimistic() ?? (this.selfAgent()?.queues.length ?? 0) > 0,
+  );
+  readonly queuePaused = computed(() => this._pauseOptimistic() ?? this.selfAgent()?.paused ?? false);
 
   /** Every caller currently waiting, across every queue, flattened with the
    * queue it's waiting in — the Queue tab's own list. */
@@ -523,13 +535,17 @@ export class SoftphoneService {
     const queues = parseQueueInput(queueInput);
     this._queueBusy.set(true);
     this._queueError.set(null);
+    this._loggedInOptimistic.set(true);
     this.api.post('secure/softphone/queue/login', { queues: queues.length ? queues : ['all'] }).subscribe({
       next: () => {
         this._queueBusy.set(false);
         this.pushLog('info', `Logged into queue(s): ${queues.join(', ') || 'all'}`);
-        this.refreshLiveAgents();
+        this.refreshLiveAgents(() => this._loggedInOptimistic.set(null));
       },
-      error: (err) => this.failQueueAction(err, 'Could not log into the queue'),
+      error: (err) => {
+        this._loggedInOptimistic.set(null);
+        this.failQueueAction(err, 'Could not log into the queue');
+      },
     });
   }
 
@@ -537,39 +553,51 @@ export class SoftphoneService {
     const queues = parseQueueInput(queueInput);
     this._queueBusy.set(true);
     this._queueError.set(null);
+    this._loggedInOptimistic.set(false);
     this.api.post('secure/softphone/queue/logout', { queues: queues.length ? queues : ['all'] }).subscribe({
       next: () => {
         this._queueBusy.set(false);
         this.pushLog('info', `Logged out of queue(s): ${queues.join(', ') || 'all'}`);
-        this.refreshLiveAgents();
+        this.refreshLiveAgents(() => this._loggedInOptimistic.set(null));
       },
-      error: (err) => this.failQueueAction(err, 'Could not log out of the queue'),
+      error: (err) => {
+        this._loggedInOptimistic.set(null);
+        this.failQueueAction(err, 'Could not log out of the queue');
+      },
     });
   }
 
   queuePause(reason = ''): void {
     this._queueBusy.set(true);
     this._queueError.set(null);
+    this._pauseOptimistic.set(true);
     this.api.post('secure/softphone/queue/pause', { reason }).subscribe({
       next: () => {
         this._queueBusy.set(false);
         this.pushLog('info', 'Paused');
-        this.refreshLiveAgents();
+        this.refreshLiveAgents(() => this._pauseOptimistic.set(null));
       },
-      error: (err) => this.failQueueAction(err, 'Could not pause'),
+      error: (err) => {
+        this._pauseOptimistic.set(null);
+        this.failQueueAction(err, 'Could not pause');
+      },
     });
   }
 
   queueUnpause(): void {
     this._queueBusy.set(true);
     this._queueError.set(null);
+    this._pauseOptimistic.set(false);
     this.api.post('secure/softphone/queue/unpause', {}).subscribe({
       next: () => {
         this._queueBusy.set(false);
         this.pushLog('info', 'Resumed');
-        this.refreshLiveAgents();
+        this.refreshLiveAgents(() => this._pauseOptimistic.set(null));
       },
-      error: (err) => this.failQueueAction(err, 'Could not resume'),
+      error: (err) => {
+        this._pauseOptimistic.set(null);
+        this.failQueueAction(err, 'Could not resume');
+      },
     });
   }
 
@@ -646,15 +674,19 @@ export class SoftphoneService {
       });
   }
 
-  refreshLiveAgents(): void {
+  refreshLiveAgents(onSettled?: () => void): void {
     this.api
       .get<LiveSnapshotEnvelope<LiveAgentsSnapshot>>('secure/softphone/agents', undefined, {
         silent: true,
       })
       .subscribe({
-        next: (envelope) => this._liveAgents.set(envelope.data),
+        next: (envelope) => {
+          this._liveAgents.set(envelope.data);
+          onSettled?.();
+        },
         error: () => {
           /* transient — the next poll tries again. */
+          onSettled?.();
         },
       });
   }

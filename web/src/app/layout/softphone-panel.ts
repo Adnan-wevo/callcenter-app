@@ -79,6 +79,8 @@ export class SoftphonePanelComponent {
 
   protected readonly dialInput = signal('');
   protected readonly showKeypadDuringCall = signal(false);
+  protected readonly showTransferInput = signal(false);
+  protected readonly transferTarget = signal('');
   protected readonly activeTab = signal<SoftphoneTab>('queue');
 
   protected readonly historyCount = computed(() => this.phone.historyMeta()?.total ?? 0);
@@ -158,6 +160,19 @@ export class SoftphonePanelComponent {
 
   protected toggleMute(call: CallSession): void {
     this.phone.toggleMute(call);
+  }
+
+  /** Blind transfer only (see SoftphoneService.blindTransfer's own doc
+   * comment on why attended isn't offered) — dials the entered extension
+   * and hands the call off immediately, no confirmation leg. */
+  protected transfer(call: CallSession): void {
+    const target = this.transferTarget().trim();
+    if (!target) {
+      return;
+    }
+    this.phone.blindTransfer(call.id, target);
+    this.transferTarget.set('');
+    this.showTransferInput.set(false);
   }
 
   protected retry(): void {

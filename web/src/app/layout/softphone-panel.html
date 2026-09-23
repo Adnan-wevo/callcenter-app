@@ -197,6 +197,15 @@
                 </button>
                 <button
                   type="button"
+                  class="btn btn-outline flex-1"
+                  [class]="showTransferInput() ? '!bg-accent' : ''"
+                  title="Transfer"
+                  (click)="showTransferInput.set(!showTransferInput())"
+                >
+                  <app-icon name="forward" [size]="16" />
+                </button>
+                <button
+                  type="button"
                   class="btn flex-1 gap-0 !bg-destructive text-white hover:opacity-90"
                   title="Hang up"
                   (click)="hangup(call)"
@@ -204,6 +213,23 @@
                   <app-icon name="phone-off" [size]="16" />
                 </button>
               </div>
+
+              @if (showTransferInput()) {
+                <div class="mt-2 flex w-full gap-2">
+                  <input
+                    type="text"
+                    class="input flex-1"
+                    placeholder="Extension to transfer to"
+                    aria-label="Transfer to extension"
+                    [value]="transferTarget()"
+                    (input)="transferTarget.set($any($event.target).value)"
+                    (keydown.enter)="transfer(call)"
+                  />
+                  <button type="button" class="btn btn-default" (click)="transfer(call)">
+                    <app-icon name="forward" [size]="14" />
+                  </button>
+                </div>
+              }
             </div>
           }
 
