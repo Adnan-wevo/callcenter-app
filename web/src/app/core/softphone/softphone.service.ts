@@ -9,6 +9,7 @@ import {
   DtmfDigit,
   RegistrationState,
   SipEngine,
+  SOCKET_DROPPED,
 } from '../../engines/sip/domain/sip-engine';
 import { JsSipEngine } from '../../engines/sip/webrtc/jssip-engine';
 import { ApiService } from '../api/api.service';
@@ -25,6 +26,10 @@ import {
   QueueWaitingCall,
   SoftphoneBootstrap,
 } from './softphone.types';
+
+/** Long enough to let JsSIP's own reconnect settle first, so a brief blip
+ *  is not met with a teardown it did not need. */
+const REBUILD_DELAY_MS = 4000;
 
 export type ConnectState = 'idle' | 'connecting' | RegistrationState | 'no-extension' | 'error';
 
@@ -75,6 +80,7 @@ export class SoftphoneService {
   private readonly _liveQueues = signal<LiveQueuesSnapshot | null>(null);
   private readonly _liveAgents = signal<LiveAgentsSnapshot | null>(null);
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private rebuildTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly _queueBusy = signal(false);
   private readonly _queueError = signal<string | null>(null);
@@ -350,6 +356,9 @@ export class SoftphoneService {
           this.startLivePolling();
         } else {
           this.stopLivePolling();
+        }
+        if (event.state === 'failed' && event.reason === SOCKET_DROPPED) {
+          this.rebuildAfterSocketDrop();
         }
       }),
     );
@@ -809,12 +818,49 @@ export class SoftphoneService {
     this._logs.set([]);
   }
 
+  /**
+   * Rebuild the engine from scratch after the PBX websocket drops.
+   *
+   * JsSIP reconnects and re-registers on its own, and that is not enough:
+   * observed on the live PBX, calls arrived normally, the socket dropped and
+   * re-registered ("registering" then "registered" in the log), and from
+   * then on inbound INVITEs simply stopped reaching the browser — the call
+   * rang out in the queue and landed in unanswered instead. Reloading the
+   * page fixed it every time, which is the tell: what recovers it is
+   * building a NEW user agent, not re-registering the old one. chan_sip
+   * keeps a single contact per peer and had gone on pointing at the dead
+   * websocket transport.
+   *
+   * So do what the reload does. Not while a call is up — dropping a live
+   * call to repair signalling would be worse than the fault — and only
+   * once, since connect() is a no-op unless disconnect() has returned the
+   * state to idle.
+   */
+  private rebuildAfterSocketDrop(): void {
+    if (this.rebuildTimer) {
+      return;
+    }
+    this.rebuildTimer = setTimeout(() => {
+      this.rebuildTimer = null;
+      if (this._calls().length > 0) {
+        return;
+      }
+      this.pushLog('info', 'Rebuilding the phone after the PBX connection dropped');
+      this.disconnect();
+      this.connect();
+    }, REBUILD_DELAY_MS);
+  }
+
   disconnect(): void {
     this.subs.forEach((s) => s.unsubscribe());
     this.subs = [];
     void this.engine?.dispose();
     this.engine = null;
     this.stopLivePolling();
+    if (this.rebuildTimer) {
+      clearTimeout(this.rebuildTimer);
+      this.rebuildTimer = null;
+    }
     this._connectState.set('idle');
     this._calls.set([]);
     this._remoteStream.set(null);

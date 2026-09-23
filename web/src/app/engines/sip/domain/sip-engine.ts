@@ -114,6 +114,14 @@ export type DtmfDigit =
   | '*' | '#';
 
 /**
+ * The reason an engine reports when the transport to the PBX drops, as
+ * opposed to the PBX rejecting a registration. Shared rather than matched on
+ * prose because SoftphoneService rebuilds the engine on exactly this one
+ * (see rebuildAfterSocketDrop) and must not act on an auth failure.
+ */
+export const SOCKET_DROPPED = 'the connection to the PBX dropped';
+
+/**
  * Something the engine saw that is worth showing in the panel's Logs tab but
  * is not a call, media or registration event in its own right.
  *

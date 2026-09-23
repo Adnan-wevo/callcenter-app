@@ -9,6 +9,7 @@ import {
   CallTransferRequest,
   DtmfDigit,
   EngineDiagnostic,
+  SOCKET_DROPPED,
   MediaEvent,
   RegistrationEvent,
   SipAccount,
@@ -169,7 +170,7 @@ export class JsSipEngine implements SipEngine {
       this.emitRegistration('failed', e?.cause ?? 'registration rejected'),
     );
     this.ua.on('disconnected', () =>
-      this.emitRegistration('failed', 'the connection to the PBX dropped'),
+      this.emitRegistration('failed', SOCKET_DROPPED),
     );
 
     this.ua.on('newRTCSession', ({ session }: { session: JsSipRTCSession }) => {
