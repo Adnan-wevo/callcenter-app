@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -70,11 +72,82 @@ func (h *Handlers) interfaceFor(c *gin.Context) (string, bool) {
 		apires.Error(c, http.StatusNotFound, "no SIP extension is assigned to your account", nil)
 		return "", false
 	}
-	// PJSIP is the modern Asterisk channel driver and what
-	// CommandProcessor.php's own findActiveChannel prefers; heal-crm's own
-	// interface format varies by deployment era (SIP/PJSIP/Local), but
-	// PJSIP/<ext> is the current, non-legacy shape.
-	return "PJSIP/" + ext, true
+	return h.queueInterfaceFor(c.Request.Context(), ext), true
+}
+
+// queueInterfaceFor resolves the AMI Interface string for ext by looking it
+// up in the live queue snapshot, rather than assembling one from a channel
+// driver prefix.
+//
+// This used to return "PJSIP/" + ext on the reasoning that PJSIP is the
+// modern driver. That was wrong for this deployment and silently broke
+// every queue pause/unpause/logout: AMI matches the Interface against the
+// member string the queue actually holds, and on this PBX that is
+//
+//	name:      "Local/5955@from-internal"
+//	interface: "5955@from-internal"
+//
+// (verified against the live queue 50000 snapshot). "PJSIP/5955" matches no
+// member, so Asterisk accepted the command and applied it to nothing — the
+// agent saw a button that appeared to work and a pause that never happened.
+// The queue's own membership is the only reliable source here, because the
+// format is a property of how the member was ADDED, not of the extension:
+// heal-crm's own provisioning writes chan_sip peers ("SIP/<ext>", see
+// OwnDeviceRepository.go in the reference source) while this PBX registers
+// queue members as Local channels.
+//
+// The fallback matters only for the one case with nothing to look up —
+// joining a queue this agent is not yet a member of anywhere — and matches
+// what this PBX uses.
+func (h *Handlers) queueInterfaceFor(ctx context.Context, ext string) string {
+	fallback := "Local/" + ext + "@from-internal"
+	if h.pbxControl == nil {
+		return fallback
+	}
+	snapshot, _, err := h.pbxControl.Queues(ctx)
+	if err != nil {
+		return fallback
+	}
+	for _, queue := range snapshot.Queues {
+		for _, member := range queue.Members {
+			if !interfaceIsExtension(member, ext) {
+				continue
+			}
+			// Name is the full channel ("Local/5955@from-internal");
+			// Interface is the same thing with the driver prefix already
+			// stripped, so it is not what AMI wants on its own.
+			if member.Name != "" {
+				return member.Name
+			}
+			return member.Interface
+		}
+	}
+	return fallback
+}
+
+// interfaceIsExtension reports whether a queue member row belongs to ext,
+// matching on the leading number so "5955@from-internal",
+// "Local/5955@from-internal" and "SIP/5955" all resolve for extension 5955
+// without "5955" also matching "59550".
+func interfaceIsExtension(member pbxcontrol.QueueMember, ext string) bool {
+	for _, candidate := range []string{member.Interface, member.Name} {
+		if candidate == "" {
+			continue
+		}
+		if s := strings.TrimPrefix(candidate, "Local/"); s != candidate {
+			candidate = s
+		}
+		if i := strings.IndexAny(candidate, "/"); i >= 0 {
+			candidate = candidate[i+1:]
+		}
+		if i := strings.IndexAny(candidate, "@"); i >= 0 {
+			candidate = candidate[:i]
+		}
+		if candidate == ext {
+			return true
+		}
+	}
+	return false
 }
 
 type queueLoginBody struct {
