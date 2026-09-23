@@ -79,15 +79,29 @@ export class SoftphoneService {
   private readonly _queueBusy = signal(false);
   private readonly _queueError = signal<string | null>(null);
 
-  /** Optimistic overrides for `queuePaused`/`queueLoggedIn`, set the instant
-   * the agent clicks and cleared once the next live-agents poll confirms
-   * (or the request fails) — without this, the badge only moves after a
-   * full pbxcontrol dispatch round trip (poll every 500ms, up to 25s) PLUS
-   * a second snapshot fetch, which reads as the button doing nothing for a
-   * beat. AMI (via `selfAgent`) stays the eventual source of truth; this
-   * only covers the gap while that's in flight. */
+  /**
+   * Optimistic overrides for `queuePaused`/`queueLoggedIn`, set the instant
+   * the agent clicks so the badge does not sit on the old value while the
+   * change propagates.
+   *
+   * They are held until the snapshot AGREES, not until the request returns,
+   * and the difference is the whole point. Measured against the live PBX:
+   * the pause itself completes in ~0.14s, but `/softphone/agents` is
+   * pbx-worker's periodically-written snapshot file and takes about 8
+   * seconds to show it. Clearing on the response meant the badge flipped to
+   * "paused", immediately snapped back when a still-stale snapshot arrived,
+   * then corrected itself seconds later — which reads as a slow, broken
+   * toggle even though the command applied instantly.
+   *
+   * An effect in the constructor retires each override once the snapshot
+   * catches up, and the timers below are the backstop for the case where it
+   * never does (the command silently failed PBX-side, so the agent should
+   * be shown the truth rather than their click forever).
+   */
   private readonly _pauseOptimistic = signal<boolean | null>(null);
   private readonly _loggedInOptimistic = signal<boolean | null>(null);
+  private pauseOptimisticTimer: ReturnType<typeof setTimeout> | null = null;
+  private loggedInOptimisticTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly _historyEntries = signal<CallLogEntry[]>([]);
   private readonly _historyMeta = signal<ApiMeta | null>(null);
@@ -267,6 +281,23 @@ export class SoftphoneService {
       } else if (!answered && this.tickTimer) {
         clearInterval(this.tickTimer);
         this.tickTimer = null;
+      }
+    });
+
+    // Retire each optimistic override once the snapshot actually agrees
+    // with it — see the signals' own doc comment for why they cannot
+    // simply be dropped when the request returns.
+    effect(() => {
+      const wantPaused = this._pauseOptimistic();
+      if (wantPaused !== null && this.selfAgent()?.paused === wantPaused) {
+        this.clearPauseOptimistic();
+      }
+    });
+    effect(() => {
+      const wantLoggedIn = this._loggedInOptimistic();
+      const loggedIn = (this.selfAgent()?.queues.length ?? 0) > 0;
+      if (wantLoggedIn !== null && loggedIn === wantLoggedIn) {
+        this.clearLoggedInOptimistic();
       }
     });
   }
@@ -545,15 +576,15 @@ export class SoftphoneService {
     const queues = parseQueueInput(queueInput);
     this._queueBusy.set(true);
     this._queueError.set(null);
-    this._loggedInOptimistic.set(true);
+    this.setLoggedInOptimistic(true);
     this.api.post('secure/softphone/queue/login', { queues: queues.length ? queues : ['all'] }).subscribe({
       next: () => {
         this._queueBusy.set(false);
         this.pushLog('info', `Logged into queue(s): ${queues.join(', ') || 'all'}`);
-        this.refreshLiveAgents(() => this._loggedInOptimistic.set(null));
+        this.refreshLiveAgents();
       },
       error: (err) => {
-        this._loggedInOptimistic.set(null);
+        this.clearLoggedInOptimistic();
         this.failQueueAction(err, 'Could not log into the queue');
       },
     });
@@ -563,15 +594,15 @@ export class SoftphoneService {
     const queues = parseQueueInput(queueInput);
     this._queueBusy.set(true);
     this._queueError.set(null);
-    this._loggedInOptimistic.set(false);
+    this.setLoggedInOptimistic(false);
     this.api.post('secure/softphone/queue/logout', { queues: queues.length ? queues : ['all'] }).subscribe({
       next: () => {
         this._queueBusy.set(false);
         this.pushLog('info', `Logged out of queue(s): ${queues.join(', ') || 'all'}`);
-        this.refreshLiveAgents(() => this._loggedInOptimistic.set(null));
+        this.refreshLiveAgents();
       },
       error: (err) => {
-        this._loggedInOptimistic.set(null);
+        this.clearLoggedInOptimistic();
         this.failQueueAction(err, 'Could not log out of the queue');
       },
     });
@@ -580,15 +611,15 @@ export class SoftphoneService {
   queuePause(reason = ''): void {
     this._queueBusy.set(true);
     this._queueError.set(null);
-    this._pauseOptimistic.set(true);
+    this.setPauseOptimistic(true);
     this.api.post('secure/softphone/queue/pause', { reason }).subscribe({
       next: () => {
         this._queueBusy.set(false);
         this.pushLog('info', 'Paused');
-        this.refreshLiveAgents(() => this._pauseOptimistic.set(null));
+        this.refreshLiveAgents();
       },
       error: (err) => {
-        this._pauseOptimistic.set(null);
+        this.clearPauseOptimistic();
         this.failQueueAction(err, 'Could not pause');
       },
     });
@@ -597,18 +628,61 @@ export class SoftphoneService {
   queueUnpause(): void {
     this._queueBusy.set(true);
     this._queueError.set(null);
-    this._pauseOptimistic.set(false);
+    this.setPauseOptimistic(false);
     this.api.post('secure/softphone/queue/unpause', {}).subscribe({
       next: () => {
         this._queueBusy.set(false);
         this.pushLog('info', 'Resumed');
-        this.refreshLiveAgents(() => this._pauseOptimistic.set(null));
+        this.refreshLiveAgents();
       },
       error: (err) => {
-        this._pauseOptimistic.set(null);
+        this.clearPauseOptimistic();
         this.failQueueAction(err, 'Could not resume');
       },
     });
+  }
+
+  // The backstop window. Comfortably past the ~8s the snapshot normally
+  // takes, so a healthy change is always retired by agreement rather than
+  // by timeout.
+  private static readonly optimisticTimeoutMs = 20000;
+
+  private setPauseOptimistic(paused: boolean): void {
+    this._pauseOptimistic.set(paused);
+    if (this.pauseOptimisticTimer) {
+      clearTimeout(this.pauseOptimisticTimer);
+    }
+    this.pauseOptimisticTimer = setTimeout(
+      () => this.clearPauseOptimistic(),
+      SoftphoneService.optimisticTimeoutMs,
+    );
+  }
+
+  private clearPauseOptimistic(): void {
+    if (this.pauseOptimisticTimer) {
+      clearTimeout(this.pauseOptimisticTimer);
+      this.pauseOptimisticTimer = null;
+    }
+    this._pauseOptimistic.set(null);
+  }
+
+  private setLoggedInOptimistic(loggedIn: boolean): void {
+    this._loggedInOptimistic.set(loggedIn);
+    if (this.loggedInOptimisticTimer) {
+      clearTimeout(this.loggedInOptimisticTimer);
+    }
+    this.loggedInOptimisticTimer = setTimeout(
+      () => this.clearLoggedInOptimistic(),
+      SoftphoneService.optimisticTimeoutMs,
+    );
+  }
+
+  private clearLoggedInOptimistic(): void {
+    if (this.loggedInOptimisticTimer) {
+      clearTimeout(this.loggedInOptimisticTimer);
+      this.loggedInOptimisticTimer = null;
+    }
+    this._loggedInOptimistic.set(null);
   }
 
   private failQueueAction(err: unknown, fallback: string): void {
