@@ -34,6 +34,10 @@ export const PERMISSIONS = [
   'call-center.realtime-monitor.actions',
   'call-center.settings.index',
   'call-center.settings.update',
+  'call-center.queue-groups.index',
+  'call-center.queue-groups.store',
+  'call-center.queue-groups.update',
+  'call-center.queue-groups.destroy',
   'softphone.supervise',
 ] as const;
 

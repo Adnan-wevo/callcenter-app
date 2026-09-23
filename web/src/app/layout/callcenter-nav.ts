@@ -107,6 +107,12 @@ const groups: CallCenterGroup[] = [
         icon: 'sliders',
         permission: 'call-center.settings.index',
       },
+      {
+        label: 'Queue Groups',
+        route: '/queue-groups',
+        icon: 'grid',
+        permission: 'call-center.queue-groups.index',
+      },
     ],
   },
 ];

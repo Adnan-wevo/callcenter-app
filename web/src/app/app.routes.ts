@@ -102,6 +102,13 @@ export const routes: Routes = [
     resolve: { authz: permissionsResolver },
     loadChildren: () => import('./features/settings/settings.routes').then((m) => m.SETTINGS_ROUTES),
   },
+  {
+    path: 'queue-groups',
+    canActivate: [authGuard, requirePermission('call-center.queue-groups.index')],
+    resolve: { authz: permissionsResolver },
+    loadChildren: () =>
+      import('./features/queue-groups/queue-groups.routes').then((m) => m.QUEUE_GROUPS_ROUTES),
+  },
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   {
     // An unknown URL is a 404, not a silent bounce to the dashboard: the
