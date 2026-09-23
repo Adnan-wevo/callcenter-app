@@ -114,6 +114,21 @@ export type DtmfDigit =
   | '*' | '#';
 
 /**
+ * Something the engine saw that is worth showing in the panel's Logs tab but
+ * is not a call, media or registration event in its own right.
+ *
+ * This exists because two real bugs were invisible from outside the engine.
+ * An inbound call that never produced a popup could not be told apart from
+ * an INVITE that never arrived, and a call that died after exactly 60
+ * seconds could not be told apart from one whose ICE never connected — in
+ * both cases the engine knew and had nowhere to say so.
+ */
+export interface EngineDiagnostic {
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
+/**
  * Implemented once per transport. `JsSipEngine` is the real one (WebRTC over
  * a secure WebSocket to Asterisk); `FakeSipEngine` is the in-memory stand-in.
  */
@@ -121,6 +136,7 @@ export interface SipEngine {
   readonly registrationEvents: Observable<RegistrationEvent>;
   readonly callEvents: Observable<CallEvent>;
   readonly mediaEvents: Observable<MediaEvent>;
+  readonly diagnostics: Observable<EngineDiagnostic>;
 
   initialize(config: SipEngineConfig): Promise<void>;
 

@@ -8,6 +8,7 @@ import {
   CallSession,
   CallTransferRequest,
   DtmfDigit,
+  EngineDiagnostic,
   MediaEvent,
   RegistrationEvent,
   SipAccount,
@@ -22,8 +23,8 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsSipRTCSession = any;
 
-/**
- * Deliberately NO ICE/STUN server here — this was tried (a public Google
+/*
+ * NOTE ON ICE — deliberately NO ICE/STUN server is configured here — this was tried (a public Google
  * STUN server) and made things worse: calls would connect, then die on
  * their own after a stretch of silence. The reason is on the Asterisk side,
  * not this file: heal-crm's own PBX provisioning
@@ -50,20 +51,6 @@ type JsSipRTCSession = any;
  * oversight.
  */
 
-/**
- * For a queue-routed call, Asterisk's dialplan sets the INVITE's From
- * display-name to the queue number glued directly onto the caller's own
- * number with no separator (queue 50000 + caller 0198202884 ->
- * "500000198202884") — that is routing metadata for the agent leg, not a
- * human name, but JsSIP hands it straight through as
- * `remote_identity.display_name` with nothing to mark it as different from
- * a real Caller ID name. The queue is already shown separately (see
- * `primaryCallQueue`), so anything that's purely digits and ends with the
- * caller's own number is treated as no name at all instead of being shown
- * as one — and, since `CallSession.displayName` is what gets sent as
- * `caller_name` when the call log is created, this also keeps that junk
- * value out of call history.
- */
 /** JsSIP's payload on both `ended` and `failed`. */
 interface JsSipEndEvent {
   /** Who ended it: 'local' (this browser), 'remote' (far end), or 'system'
@@ -86,6 +73,21 @@ function describeEnd(e: JsSipEndEvent | undefined): string | undefined {
   const parts = [e?.originator, e?.cause].filter(Boolean);
   return parts.length ? parts.join(': ') : undefined;
 }
+
+/**
+ * For a queue-routed call, Asterisk's dialplan sets the INVITE's From
+ * display-name to the queue number glued directly onto the caller's own
+ * number with no separator (queue 50000 + caller 0198202884 ->
+ * "500000198202884") — that is routing metadata for the agent leg, not a
+ * human name, but JsSIP hands it straight through as
+ * `remote_identity.display_name` with nothing to mark it as different from
+ * a real Caller ID name. The queue is already shown separately (see
+ * `primaryCallQueue`), so anything that's purely digits and ends with the
+ * caller's own number is treated as no name at all instead of being shown
+ * as one — and, since `CallSession.displayName` is what gets sent as
+ * `caller_name` when the call log is created, this also keeps that junk
+ * value out of call history.
+ */
 
 function cleanDisplayName(raw: string | undefined, remote: string): string | undefined {
   const name = raw?.trim();
@@ -115,10 +117,12 @@ export class JsSipEngine implements SipEngine {
   private readonly registration$ = new Subject<RegistrationEvent>();
   private readonly call$ = new Subject<CallEvent>();
   private readonly media$ = new Subject<MediaEvent>();
+  private readonly diagnostics$ = new Subject<EngineDiagnostic>();
 
   readonly registrationEvents: Observable<RegistrationEvent> = this.registration$.asObservable();
   readonly callEvents: Observable<CallEvent> = this.call$.asObservable();
   readonly mediaEvents: Observable<MediaEvent> = this.media$.asObservable();
+  readonly diagnostics: Observable<EngineDiagnostic> = this.diagnostics$.asObservable();
 
   private config?: SipEngineConfig;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -169,6 +173,13 @@ export class JsSipEngine implements SipEngine {
     );
 
     this.ua.on('newRTCSession', ({ session }: { session: JsSipRTCSession }) => {
+      // Logged at the UA level, before any of this engine's own state
+      // handling, so "the INVITE never arrived" and "it arrived and we
+      // mishandled it" stop looking identical from the Logs tab.
+      this.diagnostics$.next({
+        level: 'info',
+        message: `SIP session (${session.direction}) from ${session.remote_identity?.uri?.user ?? 'unknown'}`,
+      });
       if (session.direction === 'incoming') {
         this.adoptIncoming(session);
       }
@@ -358,6 +369,19 @@ export class JsSipEngine implements SipEngine {
         if (remoteStream) {
           this.media$.next({ callId: id, remoteStream });
         }
+      });
+
+      // WebRTC sends no media until ICE connects, so an ICE state that never
+      // reaches connected/completed means Asterisk receives no RTP at all —
+      // and with rtptimeout set, it hangs the call up a minute later. That
+      // is indistinguishable from a normal hangup in the call log, which is
+      // why it gets its own line here.
+      peerconnection.addEventListener('iceconnectionstatechange', () => {
+        const state = peerconnection.iceConnectionState;
+        this.diagnostics$.next({
+          level: state === 'failed' ? 'error' : state === 'disconnected' ? 'warn' : 'info',
+          message: `ICE ${state}`,
+        });
       });
     };
     if (rtc.connection) {

@@ -385,6 +385,9 @@ export class SoftphoneService {
       }),
     );
     this.subs.push(
+      engine.diagnostics.subscribe((event) => this.pushLog(event.level, event.message)),
+    );
+    this.subs.push(
       engine.mediaEvents.subscribe((event) => {
         if (event.remoteStream) {
           this._remoteStream.set(event.remoteStream);

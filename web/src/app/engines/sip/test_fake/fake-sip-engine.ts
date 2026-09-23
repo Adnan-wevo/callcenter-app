@@ -1,4 +1,4 @@
-import { Observable, Subject } from 'rxjs';
+import { Observable, Subject, EMPTY } from 'rxjs';
 
 import {
   CallEvent,
@@ -8,6 +8,7 @@ import {
   CallSession,
   CallTransferRequest,
   DtmfDigit,
+  EngineDiagnostic,
   MediaEvent,
   RegistrationEvent,
   SipAccount,
@@ -36,6 +37,8 @@ export class FakeSipEngine implements SipEngine {
   readonly registrationEvents: Observable<RegistrationEvent> = this.registration$.asObservable();
   readonly callEvents: Observable<CallEvent> = this.call$.asObservable();
   readonly mediaEvents: Observable<MediaEvent> = this.media$.asObservable();
+  /** Nothing to diagnose without a real transport. */
+  readonly diagnostics: Observable<EngineDiagnostic> = EMPTY;
 
   private readonly sessions = new Map<CallId, CallSession>();
   private nextId = 1;
