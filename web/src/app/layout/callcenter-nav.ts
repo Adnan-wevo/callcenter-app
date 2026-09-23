@@ -113,6 +113,12 @@ const groups: CallCenterGroup[] = [
         icon: 'grid',
         permission: 'call-center.queue-groups.index',
       },
+      {
+        label: 'Scheduled Reports',
+        route: '/scheduled-reports',
+        icon: 'clock',
+        permission: 'call-center.scheduled-reports.index',
+      },
     ],
   },
 ];

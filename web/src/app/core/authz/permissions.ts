@@ -38,6 +38,10 @@ export const PERMISSIONS = [
   'call-center.queue-groups.store',
   'call-center.queue-groups.update',
   'call-center.queue-groups.destroy',
+  'call-center.scheduled-reports.index',
+  'call-center.scheduled-reports.store',
+  'call-center.scheduled-reports.update',
+  'call-center.scheduled-reports.destroy',
   'softphone.supervise',
 ] as const;
 
