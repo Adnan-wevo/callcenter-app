@@ -112,6 +112,15 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 		// only to serve that one screen today.
 		secure.GET("/admin/users", middleware.RequirePermission(auth.PermSIPExtensionsIndex), h.ListUsers)
 
+		// Row-level security admin — same four permission names as
+		// UserFilters\Index.php's own $this->authorize(...) calls.
+		filters := secure.Group("/admin/user-filters")
+		{
+			filters.GET("", middleware.RequirePermission(auth.PermUserFiltersIndex), h.ListUserFilters)
+			filters.PUT("/:id", middleware.RequirePermission(auth.PermUserFiltersUpdate), h.UpdateUserFilters)
+			filters.DELETE("/:id", middleware.RequirePermission(auth.PermUserFiltersDestroy), h.ClearUserFilters)
+		}
+
 		cc := secure.Group("/call-center")
 		{
 			// Lookups feed the filter bar on every report screen, so they are

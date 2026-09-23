@@ -95,6 +95,12 @@ const groups: CallCenterGroup[] = [
         icon: 'phone-call',
         permission: 'call-center.sip-extensions.index',
       },
+      {
+        label: 'User Filters',
+        route: '/user-filters',
+        icon: 'sliders',
+        permission: 'call-center.user-filters.index',
+      },
     ],
   },
 ];

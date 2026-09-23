@@ -68,6 +68,16 @@ const (
 	PermSIPExtensionsUpdate  = "call-center.sip-extensions.update"
 	PermSIPExtensionsDestroy = "call-center.sip-extensions.destroy"
 
+	// Row-level security admin — same four names as
+	// Modules/CallCenter/app/Livewire/UserFilters/Index.php's own
+	// $this->authorize(...) calls. "edit" gates opening the form (a pure UI
+	// concern there — heal-crm never checks it server-side beyond that);
+	// "update"/"destroy" are the ones actually enforced on save/clear here.
+	PermUserFiltersIndex   = "call-center.user-filters.index"
+	PermUserFiltersEdit    = "call-center.user-filters.edit"
+	PermUserFiltersUpdate  = "call-center.user-filters.update"
+	PermUserFiltersDestroy = "call-center.user-filters.destroy"
+
 	// Same two names as RealtimeMonitor/Index.php's own $this->authorize
 	// calls. "index" gates viewing the board; "actions" gates the
 	// supervisor controls on it (pause/unpause/logout an agent, redirect a
@@ -94,6 +104,10 @@ var AllPermissions = []string{
 	PermSIPExtensionsStore,
 	PermSIPExtensionsUpdate,
 	PermSIPExtensionsDestroy,
+	PermUserFiltersIndex,
+	PermUserFiltersEdit,
+	PermUserFiltersUpdate,
+	PermUserFiltersDestroy,
 	PermRealtimeMonitorIndex,
 	PermRealtimeMonitorActions,
 }
@@ -145,6 +159,12 @@ type Store interface {
 	// — this is the seam an admin screen that needs "which user" (assigning
 	// a SIP extension, say) reads from, same as ByUsername/ByID above.
 	List() []*User
+	// SetFilters replaces a user's AllowedQueues/AllowedAgents row-level
+	// restriction in place — the User Filters admin screen's save/clear
+	// action. Reports true if the user was found. This mutates the SAME
+	// store Verify()/ByID() read from, so a change here takes effect on
+	// that user's very next request — there is no separate cache to bust.
+	SetFilters(userID string, queues, agents []string) bool
 }
 
 // MemoryStore is an in-process Store. Dev/local use only.
@@ -178,6 +198,18 @@ func (s *MemoryStore) ByID(id string) (*User, bool) {
 	defer s.mu.RUnlock()
 	u, ok := s.byID[id]
 	return u, ok
+}
+
+func (s *MemoryStore) SetFilters(userID string, queues, agents []string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.byID[userID]
+	if !ok {
+		return false
+	}
+	u.AllowedQueues = nonNil(queues)
+	u.AllowedAgents = nonNil(agents)
+	return true
 }
 
 func (s *MemoryStore) List() []*User {
@@ -294,6 +326,12 @@ func (s *Service) Login(username, password string) (token string, expiresIn int,
 // an admin picker (SIP Extensions' "assign to user") reads from.
 func (s *Service) ListUsers() []*User {
 	return s.store.List()
+}
+
+// SetUserFilters replaces a user's row-level queue/agent restriction — see
+// Store.SetFilters's own doc comment.
+func (s *Service) SetUserFilters(userID string, queues, agents []string) bool {
+	return s.store.SetFilters(userID, queues, agents)
 }
 
 // Verify checks a bearer token and resolves the user behind it. The user is
