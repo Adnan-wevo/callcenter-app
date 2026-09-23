@@ -12,19 +12,23 @@ import (
 // changes — but none of the methods are implemented yet, and finishing it
 // is NOT the small job the stub's original TODO implied.
 //
-// Checked against the v3 source (reference/wevetel-go-v3) 2026-09-23. Two
-// findings, both blocking:
+// v3 IS deployed and reachable, on a non-default port that is easy to miss:
 //
-//  1. Nothing is deployed to talk to. v2 answers on
-//     sbc.wevetel.com/wevetel-pbx-worker/api/reports.php (401, demanding
-//     the HMAC headers HMACClient sends); every v3 path there 404s.
-//     Standing v3 up is its own service — own MySQL schema (pbx_api),
-//     migrations, JWT secret, config/freepbx_connections.yaml.
-//  2. v3 is not shaped like this interface. Routes are
-//     /{APP_SYSPREFIX}/api/v1/secure/callcenter/... and v3 aggregates
-//     SERVER-side, where this service pulls raw rows and aggregates them
-//     itself in internal/reports. Only four of the seven methods below
-//     have a clean counterpart:
+//	http://sbc.wevetel.com:8101/wmpbxworker
+//	   swagger UI   /api/docs        swagger.json   /swagger.json
+//	   login        POST /api/v1/open/auth/login  {email, password}
+//
+// (Probing only https/443 there returns 404 for every v3 path and makes it
+// look undeployed — it is not. v2 continues to answer separately on
+// sbc.wevetel.com/wevetel-pbx-worker/api/reports.php.)
+//
+// What actually blocks finishing this client is shape, not availability.
+// Checked against the deployed contract (318 paths) and the v3 source in
+// reference/wevetel-go-v3 on 2026-09-23: routes are
+// /wmpbxworker/api/v1/secure/callcenter/... and v3 aggregates SERVER-side,
+// where this service pulls raw rows and aggregates them itself in
+// internal/reports. Only four of the seven methods below have a clean
+// counterpart:
 //
 //     QueueNames  -> GET /lookups/queues
 //     AgentNames  -> GET /lookups/agents
@@ -40,9 +44,10 @@ import (
 //
 // So adopting v3 is a handler-layer decision (call its report endpoints
 // directly and drop most of internal/reports), not a gateway swap behind
-// this interface. Decision 2026-09-23: stay on v2 until v3 is deployed.
-// Auth, when it is: POST /{prefix}/api/v1/open/auth/login returns a 60min
-// access token plus a refresh token, permissions baked into the claims.
+// this interface — which is why implementing these seven methods is
+// probably the wrong shape for the migration, not merely unfinished work.
+// Login returns a 60min access token plus a refresh token, with
+// permissions baked into the claims.
 type JWTClient struct {
 	http    *http.Client
 	baseURL string
