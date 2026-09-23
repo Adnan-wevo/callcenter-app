@@ -231,6 +231,24 @@ func (c *Client) send(ctx context.Context, method, path string, query url.Values
 	return resp.StatusCode, raw, nil
 }
 
+func marshal(v any) ([]byte, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("pbxv3: encode body: %w", err)
+	}
+	return b, nil
+}
+
+func unmarshal(raw []byte, out any) error {
+	if out == nil {
+		return nil
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return fmt.Errorf("pbxv3: decode response: %w", err)
+	}
+	return nil
+}
+
 // summarize pulls the human-readable reason out of an error envelope, so a
 // wrapped error says "extension not found" rather than carrying a whole
 // JSON document into a log line.

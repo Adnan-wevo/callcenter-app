@@ -39,12 +39,29 @@ type ExternalDirectory interface {
 // like a broken sign-in rather than a deliberate restriction. It is the
 // conservative direction — the agent set is the floor, not admin.
 func permissionsForRoles(roles []string) (perms []string, super bool) {
+	// The names below are the ones v3 actually defines (checked against
+	// /secure/acl/roles: user, root, agent, operator), plus the obvious
+	// synonyms a differently-seeded deployment might use.
 	for _, role := range roles {
 		switch role {
 		case "root", "super-admin", "superadmin":
 			return nil, true
 		case "admin", "supervisor":
 			return AllPermissions, false
+		}
+	}
+	// Second pass, so a role that merely adds reach never outranks one of
+	// the above when a user holds both.
+	for _, role := range roles {
+		if role == "operator" {
+			// The operator console is a supervisor seat: it watches the live
+			// board and acts on other people's calls, which is exactly what
+			// PermSoftphoneSupervise gates.
+			return append(agentPermissions(),
+				PermSoftphoneSupervise,
+				PermRealtimeMonitorActions,
+				PermCallSearchIndex,
+			), false
 		}
 	}
 	return agentPermissions(), false

@@ -112,6 +112,18 @@ func NewRouter(h *Handlers, authSvc *auth.Service, corsOrigins []string) *gin.En
 		// only to serve that one screen today.
 		secure.GET("/admin/users", middleware.RequirePermission(auth.PermSIPExtensionsIndex), h.ListUsers)
 
+		// User administration, backed by v3's directory — this service's own
+		// store is seeded from environment variables and cannot grow an
+		// account, which is why there was no way to add a user before.
+		users := secure.Group("/admin/users")
+		{
+			users.GET("/manage", middleware.RequirePermission(auth.PermUsersIndex), h.ListManagedUsers)
+			users.POST("", middleware.RequirePermission(auth.PermUsersStore), h.CreateUser)
+			users.PUT("/:id", middleware.RequirePermission(auth.PermUsersUpdate), h.UpdateUser)
+			users.DELETE("/:id", middleware.RequirePermission(auth.PermUsersDestroy), h.DeleteUser)
+		}
+		secure.GET("/admin/roles", middleware.RequirePermission(auth.PermUsersIndex), h.ListRoles)
+
 		// Row-level security admin — same four permission names as
 		// UserFilters\Index.php's own $this->authorize(...) calls.
 		filters := secure.Group("/admin/user-filters")

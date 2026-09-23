@@ -49,3 +49,28 @@ func TestAgentFloorGrantsNothingPrivileged(t *testing.T) {
 		}
 	}
 }
+
+// The roles below are the ones v3 actually defines, so these are the cases
+// that decide what a real user of this system can do.
+func TestPermissionsForRealV3Roles(t *testing.T) {
+	if _, super := permissionsForRoles([]string{"root"}); !super {
+		t.Error("root must be super")
+	}
+	if _, super := permissionsForRoles([]string{"operator"}); super {
+		t.Error("operator must not be super")
+	}
+	perms, _ := permissionsForRoles([]string{"operator"})
+	var supervise bool
+	for _, p := range perms {
+		if p == PermSoftphoneSupervise {
+			supervise = true
+		}
+	}
+	if !supervise {
+		t.Error("operator should hold softphone.supervise")
+	}
+	// Holding a lesser role alongside root must not cost the super flag.
+	if _, super := permissionsForRoles([]string{"operator", "root"}); !super {
+		t.Error("root alongside operator must still be super")
+	}
+}

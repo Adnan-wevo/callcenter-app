@@ -110,6 +110,16 @@ const (
 	PermScheduledReportsStore   = "call-center.scheduled-reports.store"
 	PermScheduledReportsUpdate  = "call-center.scheduled-reports.update"
 	PermScheduledReportsDestroy = "call-center.scheduled-reports.destroy"
+
+	// User administration. No heal-crm counterpart to borrow names from —
+	// its user directory lives in the Laravel monolith, not the CallCenter
+	// module — so these follow the same shape as everything above. Backed by
+	// v3's /secure/acl/users, since that is the directory this service now
+	// signs people in against (see internal/auth/external.go).
+	PermUsersIndex   = "call-center.users.index"
+	PermUsersStore   = "call-center.users.store"
+	PermUsersUpdate  = "call-center.users.update"
+	PermUsersDestroy = "call-center.users.destroy"
 )
 
 // AllPermissions is the catalogue, in the order a UI would list it.
@@ -145,6 +155,10 @@ var AllPermissions = []string{
 	PermScheduledReportsStore,
 	PermScheduledReportsUpdate,
 	PermScheduledReportsDestroy,
+	PermUsersIndex,
+	PermUsersStore,
+	PermUsersUpdate,
+	PermUsersDestroy,
 }
 
 var (
