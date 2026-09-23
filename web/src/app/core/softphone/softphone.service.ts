@@ -335,6 +335,16 @@ export class SoftphoneService {
           }
           return [...others, event.session];
         });
+        // The queue/agent snapshots otherwise only move on the 6s poll
+        // tick (startLivePolling below) — independent of this SIP-driven
+        // call event, which fires the instant an INVITE arrives. Without
+        // this, the incoming-call popup can appear well before the Queue
+        // tab's "waiting calls" list or badge count catches up, reading as
+        // "it only updates once I've already answered".
+        if (this.isConnected()) {
+          this.refreshLiveQueues();
+          this.refreshLiveAgents();
+        }
         this.syncCallLog(event.session, isNewCall);
         const who = event.session.displayName?.trim() || event.session.remote;
         this.pushLog(

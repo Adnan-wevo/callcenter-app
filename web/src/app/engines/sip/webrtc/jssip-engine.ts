@@ -23,21 +23,32 @@ import {
 type JsSipRTCSession = any;
 
 /**
- * No ICE server was configured anywhere in this codebase before — confirmed
- * by search, and the reason a WebRTC call would connect (SDP/SIP signalling
- * succeeds) and then die on its own a few dozen seconds later: without a
- * STUN server, a browser behind NAT can only gather a `host` ICE candidate,
- * which the PBX on the public internet usually cannot reach. JsSIP's own
- * RTCSession wires `iceconnectionstatechange` to auto-`terminate()` the
- * call the moment `iceConnectionState` becomes `'failed'` — which is
- * exactly "the call dies by itself", not a crash anywhere in this app's own
- * code. A public STUN server fixes the common case (NAT with a normal,
- * non-symmetric mapping); a fully locked-down network still needs a TURN
- * relay, which this does not attempt to provide.
+ * Deliberately NO ICE/STUN server here — this was tried (a public Google
+ * STUN server) and made things worse: calls would connect, then die on
+ * their own after a stretch of silence. The reason is on the Asterisk side,
+ * not this file: heal-crm's own PBX provisioning
+ * (Modules/Me/Repositories/OwnDeviceRepository.go in the reference
+ * wevetel-go-v3 source) sets `nat=auto_force_rport,comedia` and
+ * `directmedia=no` on every SIP peer — classic Asterisk symmetric-RTP.
+ * Asterisk does not trust the SDP-advertised address at all; it learns the
+ * real one from whichever source IP:port the RTP packets actually arrive
+ * from, continuously, for the whole call, and just keeps adapting if a
+ * NAT re-maps mid-call. There is no failure state to trip. heal-crm's own
+ * browser-side JS matches this exactly: no STUN/ICE server configured
+ * anywhere in it either — the PBX does all the NAT work.
+ *
+ * A real ICE/STUN negotiation on top of that is a second, independent NAT
+ * traversal mechanism layered onto a media path that already has one, and
+ * `chan_sip`'s `icesupport=yes` is compliance-level SDP support, not a full
+ * ICE agent the way `chan_pjsip` is — it does not do proper consent
+ * freshness. A transient NAT hiccup during silence can flip this engine's
+ * own `iceConnectionState` to `failed` through THAT path, and JsSIP's
+ * RTCSession auto-`terminate()`s the instant that happens — a failure mode
+ * that cannot occur on heal-crm's own comedia-only setup, because there is
+ * no ICE state to fail in the first place. Leaving `pcConfig` unset (no
+ * `iceServers`) is what matches the proven-working reference, not an
+ * oversight.
  */
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-];
 
 /**
  * For a queue-routed call, Asterisk's dialplan sets the INVITE's From
@@ -168,7 +179,6 @@ export class JsSipEngine implements SipEngine {
       // A call with no inbound audio is a call the agent cannot hear. Asking
       // for it explicitly beats relying on the far end to offer it.
       rtcOfferConstraints: { offerToReceiveAudio: true, offerToReceiveVideo: false },
-      pcConfig: { iceServers: ICE_SERVERS },
     });
 
     this.rtc.set(id, rtc);
@@ -181,7 +191,6 @@ export class JsSipEngine implements SipEngine {
   async answerCall(callId: CallId): Promise<void> {
     this.rtc.get(callId)?.answer({
       mediaConstraints: { audio: true, video: false },
-      pcConfig: { iceServers: ICE_SERVERS },
     });
   }
 
