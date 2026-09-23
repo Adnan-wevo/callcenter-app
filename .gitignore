@@ -7,3 +7,8 @@
 web/node_modules/
 web/dist/
 web/.angular/
+
+# Vendored reference clone (separate repo)
+reference/wevetel-pbx-worker/
+reference/wevetel-go-v2/
+reference/wevetel-go-v3/
